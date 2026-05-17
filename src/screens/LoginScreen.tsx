@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -84,9 +85,10 @@ export default function LoginScreen() {
         <StatusBar hidden={true} />
 
         <View style={styles.header}>
-          <View style={styles.headerLogo}>
-            <Text style={styles.headerLogoText}>TNO</Text>
-          </View>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={styles.headerLogoImg}
+          />
           <Text style={styles.headerTitle}>
             The Next <Text style={styles.red}>Olympian</Text>
           </Text>
@@ -228,15 +230,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#2A2A2A",
     backgroundColor: "#0A0A0A",
   },
-  headerLogo: {
-    width: 32,
-    height: 32,
-    backgroundColor: "#D32F2F",
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerLogoText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  headerLogoImg: { width: 36, height: 36, resizeMode: "contain" },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",

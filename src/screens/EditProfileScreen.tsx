@@ -104,6 +104,41 @@ export default function EditProfileScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
+      // Step 1: upload new photo to R2 if user picked one
+      let newPhotoUrl = athlete?.photo_url ?? null;
+      if (photo) {
+        const photoForm = new FormData();
+        const filename = photo.uri.split("/").pop() || "photo.jpg";
+        const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
+        const mimeMap: Record<string, string> = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          webp: "image/webp",
+        };
+        photoForm.append("photo", {
+          uri: photo.uri,
+          name: filename,
+          type: mimeMap[ext] ?? "image/jpeg",
+        } as any);
+        photoForm.append("athlete_id", athlete.id);
+
+        const photoRes = await fetch(`${API_BASE_URL}/api/upload/photo`, {
+          method: "POST",
+          body: photoForm,
+        });
+        const photoData = await photoRes.json();
+        if (photoRes.ok) newPhotoUrl = photoData.photo_url;
+        else {
+          Alert.alert(
+            "Photo Upload Failed",
+            photoData.message ||
+              "Could not upload photo. Other changes will still be saved.",
+          );
+        }
+      }
+
+      // Step 2: update profile text fields
       const body = new URLSearchParams();
       body.append("id", athlete.id);
       body.append("name", form.name.trim());
@@ -112,6 +147,7 @@ export default function EditProfileScreen() {
       body.append("city", form.city.trim());
       body.append("bio", form.bio.trim());
       body.append("achievements", form.achievements.trim());
+      if (newPhotoUrl) body.append("photo_url", newPhotoUrl);
 
       const response = await fetch(`${API_BASE_URL}/api/profile`, {
         method: "PATCH",
@@ -122,8 +158,7 @@ export default function EditProfileScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        // Update global context so all screens see the new data instantly
-        updateAthlete(data.data);
+        updateAthlete({ ...data.data, photo_url: newPhotoUrl });
         router.replace({ pathname: "/(tabs)/profile" });
       } else {
         Alert.alert("Error", data.message || "Could not save changes.");

@@ -1,11 +1,11 @@
 import { Tabs } from "expo-router";
 import React from "react";
 import {
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -104,14 +104,14 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 20,
-    color: "#444",
+    color: "#FFFFFF",
   },
   iconActive: {
     color: "#EF4444",
   },
   label: {
     fontSize: 10,
-    color: "#444",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
   labelActive: {

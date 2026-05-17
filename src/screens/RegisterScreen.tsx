@@ -37,7 +37,7 @@ const SPORTS = [
   "other",
 ];
 
-const PROVINCES = ["Punjab", "Sindh", "KPK", "Balochistan"];
+const PROVINCES = ["Punjab", "Sindh", "KPK", "Balochistan", "Federal"];
 
 const CITIES_BY_PROVINCE: Record<string, string[]> = {
   Punjab: [
@@ -113,6 +113,7 @@ const CITIES_BY_PROVINCE: Record<string, string[]> = {
     "Mastung",
     "Kalat",
   ],
+  Federal: ["Islamabad"],
 };
 
 // ── Types ─────────────────────────────────────────────────────
@@ -212,7 +213,7 @@ export default function RegisterScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const body = new URLSearchParams();
+      const body = new FormData();
       body.append("name", form.name.trim());
       body.append("email", form.email.trim());
       body.append("phone", form.phone.trim());
@@ -223,10 +224,27 @@ export default function RegisterScreen() {
       body.append("achievements", form.achievements.trim());
       body.append("password", form.password);
 
+      // Attach photo if selected
+      if (photo) {
+        const filename = photo.uri.split("/").pop() || "photo.jpg";
+        const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
+        const mimeMap: Record<string, string> = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          webp: "image/webp",
+        };
+        body.append("photo", {
+          uri: photo.uri,
+          name: filename,
+          type: mimeMap[ext] ?? "image/jpeg",
+        } as any);
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
+        body,
+        // Don't set Content-Type — fetch sets it with boundary automatically
       });
       const data = await response.json();
 
@@ -311,9 +329,10 @@ export default function RegisterScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLogo}>
-            <Text style={styles.headerLogoText}>TNO</Text>
-          </View>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={styles.headerLogoImg}
+          />
           <Text style={styles.headerTitle}>
             The Next <Text style={styles.red}>Olympian</Text>
           </Text>
@@ -725,15 +744,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#2A2A2A",
     backgroundColor: "#0A0A0A",
   },
-  headerLogo: {
-    width: 32,
-    height: 32,
-    backgroundColor: "#D32F2F",
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerLogoText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  headerLogoImg: { width: 36, height: 36, resizeMode: "contain" },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",

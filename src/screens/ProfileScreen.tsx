@@ -1,7 +1,8 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 
 // ── Types ────────────────────────────────────────────────────
@@ -113,9 +115,10 @@ export default function ProfileScreen() {
   const { athlete: contextAthlete, updateAthlete, logout } = useAuth();
 
   const [athlete, setAthleteLocal] = useState<Athlete | null>(null);
+  const [stats, setStats] = useState({ followers: 0, following: 0, videos: 0 });
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Prefer context athlete, fall back to params (for backward compat)
     if (contextAthlete) {
       setAthleteLocal(contextAthlete);
     } else if (params.athlete) {
@@ -125,6 +128,44 @@ export default function ProfileScreen() {
     }
   }, [contextAthlete, params.athlete]);
 
+  // Fetch stats function — reusable for both auto and manual refresh
+  const fetchStats = useCallback(
+    async (isRefresh = false) => {
+      if (!athlete?.id) return;
+      if (isRefresh) setRefreshing(true);
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/api/athletes/${athlete.id}/stats`,
+        );
+        const data = await res.json();
+        if (data.status === "success") {
+          setStats({
+            followers: data.followers,
+            following: data.following,
+            videos: data.videos,
+          });
+        }
+      } catch {
+      } finally {
+        if (isRefresh) setRefreshing(false);
+      }
+    },
+    [athlete?.id],
+  );
+
+  // Fetch on mount when athlete loads
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Re-fetch every time user navigates back to this screen
+  // This handles: unfollow someone → go back → counts update instantly
+  useFocusEffect(
+    useCallback(() => {
+      fetchStats();
+    }, [fetchStats]),
+  );
+
   if (!athlete) {
     return (
       <View style={styles.loading}>
@@ -133,9 +174,9 @@ export default function ProfileScreen() {
     );
   }
 
-  const followers = athlete.followers ?? 0;
-  const following = athlete.following ?? 0;
-  const videos = athlete.videos ?? 0;
+  const followers = stats.followers;
+  const following = stats.following;
+  const videos = stats.videos;
   const city = athlete.city ?? "";
   const bio = athlete.bio ?? athlete.achievements ?? "";
 
@@ -147,6 +188,14 @@ export default function ProfileScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchStats(true)}
+            tintColor="#EF4444"
+            colors={["#EF4444"]}
+          />
+        }
       >
         {/* ── Top bar ── */}
         <View style={styles.topBar}>

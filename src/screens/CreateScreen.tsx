@@ -1,28 +1,43 @@
 import {
-    CameraView,
-    useCameraPermissions,
-    useMicrophonePermissions,
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
 } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import * as VideoThumbnails from "expo-video-thumbnails";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 
-type Mode = "menu" | "record" | "preview" | "uploading" | "done";
+const { width, height } = Dimensions.get("window");
+const THUMB_SIZE = (width - 52) / 3;
 
-// ── Pro tips ──────────────────────────────────────────────────
+type Mode = "menu" | "record" | "preview" | "uploading";
+
+const UPLOAD_STEPS = [
+  "Preparing video...",
+  "Connecting to server...",
+  "Uploading to cloud...",
+  "Checking content...",
+  "Saving your post...",
+];
+
 const PRO_TIPS = [
   "Film in portrait mode for best visibility",
   "Show your best skills in the first 3 seconds",
@@ -31,17 +46,430 @@ const PRO_TIPS = [
   "Keep videos between 15–60 seconds for best reach",
 ];
 
-// ── Upload progress steps ─────────────────────────────────────
-const UPLOAD_STEPS = [
-  "Preparing video...",
-  "Connecting to server...",
-  "Uploading to cloud...",
-  "Saving your post...",
-  "Almost done...",
-];
+interface VideoItem {
+  id: string;
+  url: string;
+  caption: string;
+  sport: string;
+  likes: number;
+  uploaded_at: string;
+  thumbnail?: string;
+}
 
+// ── Single video card inside personal feed ────────────────────
+function PersonalVideoCard({
+  video,
+  isActive,
+  athlete,
+}: {
+  video: VideoItem;
+  isActive: boolean;
+  athlete: any;
+}) {
+  const player = useVideoPlayer(video.url, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+  const [liked, setLiked] = useState(false);
+  const [likes, setLikes] = useState(video.likes ?? 0);
+  const [views, setViews] = useState(0);
+  const [likeLoading, setLikeLoading] = useState(false);
+
+  useEffect(() => {
+    if (!athlete?.id) return;
+    fetch(
+      `${API_BASE_URL}/api/videos/${video.id}/like?athlete_id=${athlete.id}`,
+    )
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.status === "success") {
+          setLiked(d.liked);
+          setLikes(d.likes);
+        }
+      })
+      .catch(() => {});
+    fetch(`${API_BASE_URL}/api/videos/${video.id}/views`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.status === "success") setViews(d.views);
+      })
+      .catch(() => {});
+  }, [video.id, athlete?.id]);
+
+  useEffect(() => {
+    if (isActive) player.play();
+    else player.pause();
+  }, [isActive]);
+
+  async function handleLike() {
+    if (!athlete?.id || likeLoading) return;
+    setLikeLoading(true);
+    const wasLiked = liked;
+    setLiked(!wasLiked);
+    setLikes((p) => (wasLiked ? Math.max(0, p - 1) : p + 1));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ athlete_id: athlete.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikes(data.likes);
+      } else {
+        setLiked(wasLiked);
+        setLikes((p) => (wasLiked ? p + 1 : Math.max(0, p - 1)));
+      }
+    } catch {
+      setLiked(wasLiked);
+      setLikes((p) => (wasLiked ? p + 1 : Math.max(0, p - 1)));
+    } finally {
+      setLikeLoading(false);
+    }
+  }
+
+  function fmt(n: number) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+    if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+    return String(n);
+  }
+
+  function formatHandle(name: string) {
+    return "@" + name?.toLowerCase().replace(/\s+/g, "_");
+  }
+
+  function formatSport(s: string) {
+    return s?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  return (
+    <View style={feedStyles.card}>
+      <VideoView
+        player={player}
+        style={feedStyles.video}
+        contentFit="cover"
+        nativeControls={false}
+      />
+
+      {/* Bottom gradient overlay */}
+      <View style={feedStyles.bottomGradient} />
+
+      {/* Right action bar — same as home feed */}
+      <View style={feedStyles.actionBar}>
+        {/* Avatar */}
+        <View style={feedStyles.avatarWrap}>
+          {athlete?.photo_url ? (
+            <Image
+              source={{ uri: athlete.photo_url }}
+              style={feedStyles.avatarImg}
+            />
+          ) : (
+            <View style={feedStyles.avatar}>
+              <Text style={feedStyles.avatarText}>
+                {athlete?.name?.charAt(0).toUpperCase() ?? "?"}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Like */}
+        <TouchableOpacity
+          style={feedStyles.actionBtn}
+          onPress={handleLike}
+          disabled={likeLoading}
+          activeOpacity={0.8}
+        >
+          <View
+            style={[
+              feedStyles.actionIconWrap,
+              liked && feedStyles.actionIconWrapLiked,
+            ]}
+          >
+            <Text
+              style={[
+                feedStyles.actionIconText,
+                liked && feedStyles.actionIconLiked,
+              ]}
+            >
+              {liked ? "♥" : "♡"}
+            </Text>
+          </View>
+          <Text style={feedStyles.actionCount}>{fmt(likes)}</Text>
+        </TouchableOpacity>
+
+        {/* Views */}
+        <View style={feedStyles.actionBtn}>
+          <View style={feedStyles.actionIconWrap}>
+            <Image
+              source={require("../../assets/icons/eye.png")}
+              style={feedStyles.actionIconImg}
+            />
+          </View>
+          <Text style={feedStyles.actionCount}>{fmt(views)}</Text>
+        </View>
+      </View>
+
+      {/* Bottom info — same layout as home feed */}
+      <View style={feedStyles.info}>
+        {/* User handle + verified */}
+        <View style={feedStyles.userRow}>
+          <Text style={feedStyles.handle}>
+            {formatHandle(athlete?.name ?? "athlete")}
+          </Text>
+          {athlete?.status === "approved" && (
+            <View style={feedStyles.verifiedBadge}>
+              <Text style={feedStyles.verifiedCheck}>✓</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Caption */}
+        {video.caption ? (
+          <Text style={feedStyles.caption} numberOfLines={2}>
+            {video.caption}
+          </Text>
+        ) : null}
+
+        {/* Tags row */}
+        <View style={feedStyles.tagsRow}>
+          {video.sport ? (
+            <View style={feedStyles.tagRed}>
+              <Text style={feedStyles.tagRedText}>
+                {formatSport(video.sport)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const feedStyles = StyleSheet.create({
+  card: { width, height, backgroundColor: "#0A0A0A" },
+  video: { ...StyleSheet.absoluteFillObject },
+
+  bottomGradient: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+    // Simulated gradient using layered views
+    backgroundColor: "rgba(0,0,0,0.0)",
+  },
+
+  // Right action bar
+  actionBar: {
+    position: "absolute",
+    right: 12,
+    bottom: 100,
+    alignItems: "center",
+    gap: 20,
+  },
+  avatarWrap: { marginBottom: 4 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#D32F2F",
+    borderWidth: 2,
+    borderColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  avatarText: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  actionBtn: { alignItems: "center", gap: 5 },
+  actionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionIconWrapLiked: {
+    backgroundColor: "rgba(239,68,68,0.2)",
+    borderColor: "rgba(239,68,68,0.5)",
+  },
+  actionIconText: { fontSize: 22, color: "#fff" },
+  actionIconLiked: { color: "#EF4444" },
+  actionIconImg: { width: 22, height: 22, tintColor: "#fff" },
+  actionCount: { fontSize: 11, color: "#fff", fontWeight: "700" },
+
+  // Bottom info
+  info: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 70,
+    padding: 16,
+    paddingBottom: 20,
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  handle: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  verifiedBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#D32F2F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verifiedCheck: { color: "#fff", fontSize: 9, fontWeight: "900" },
+  caption: { color: "#fff", fontSize: 13, lineHeight: 18, marginBottom: 8 },
+  tagsRow: { flexDirection: "row", gap: 6 },
+  tagRed: {
+    backgroundColor: "#D32F2F",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tagRedText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+});
+
+// ── Personal feed modal ───────────────────────────────────────
+function PersonalFeedModal({
+  visible,
+  videos,
+  startIndex,
+  onClose,
+  athlete,
+}: {
+  visible: boolean;
+  videos: VideoItem[];
+  startIndex: number;
+  onClose: () => void;
+  athlete: any;
+}) {
+  const [activeIndex, setActiveIndex] = useState(startIndex);
+  const flatRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    if (visible) {
+      setActiveIndex(startIndex);
+      setTimeout(() => {
+        flatRef.current?.scrollToIndex({ index: startIndex, animated: false });
+      }, 50);
+    }
+  }, [visible, startIndex]);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
+  }, []);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <StatusBar hidden={true} />
+
+        {/* Back arrow top left */}
+        <TouchableOpacity
+          style={{
+            position: "absolute",
+            top: 20,
+            left: 16,
+            zIndex: 10,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onPress={onClose}
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: "#fff", fontSize: 20, marginTop: -2 }}>←</Text>
+        </TouchableOpacity>
+
+        {/* MY VIDEOS label + counter top center */}
+        <View
+          style={{
+            position: "absolute",
+            top: 24,
+            left: 60,
+            right: 60,
+            zIndex: 10,
+            alignItems: "center",
+          }}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: "700",
+              letterSpacing: 0.5,
+            }}
+          >
+            MY VIDEOS
+          </Text>
+          <Text
+            style={{
+              color: "rgba(255,255,255,0.5)",
+              fontSize: 11,
+              marginTop: 2,
+            }}
+          >
+            {activeIndex + 1} / {videos.length}
+          </Text>
+        </View>
+
+        <FlatList
+          ref={flatRef}
+          data={videos}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => (
+            <PersonalVideoCard
+              video={item}
+              isActive={index === activeIndex}
+              athlete={athlete}
+            />
+          )}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          snapToInterval={height}
+          decelerationRate="fast"
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          getItemLayout={(_, index) => ({
+            length: height,
+            offset: height * index,
+            index,
+          })}
+          removeClippedSubviews
+          maxToRenderPerBatch={3}
+          windowSize={5}
+          initialScrollIndex={startIndex}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+// ── Main screen ───────────────────────────────────────────────
 export default function CreateScreen() {
-  const router = useRouter();
   const { athlete } = useAuth();
 
   const [mode, setMode] = useState<Mode>("menu");
@@ -51,12 +479,74 @@ export default function CreateScreen() {
   const [caption, setCaption] = useState("");
   const [uploadStep, setUploadStep] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [myVideos, setMyVideos] = useState<VideoItem[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+  const [successToast, setSuccessToast] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedStartIndex, setFeedStartIndex] = useState(0);
+
+  // Preview player — must be declared at top level (hooks rules)
+  // videoUri updates dynamically as user picks/records
+  const previewPlayer = useVideoPlayer(videoUri ?? "", (p) => {
+    p.loop = false;
+    p.muted = true;
+  });
+
+  // Keep previewPlayer in sync when videoUri changes
+  useEffect(() => {
+    if (videoUri) previewPlayer.replace(videoUri);
+  }, [videoUri]);
 
   const cameraRef = useRef<CameraView>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
-  // ── Pick from gallery ───────────────────────────────────────
+  // ── Fetch thumbnails for each video ───────────────────────────
+  async function generateThumbnail(url: string): Promise<string | undefined> {
+    try {
+      const { uri } = await VideoThumbnails.getThumbnailAsync(url, { time: 0 });
+      return uri;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // ── Fetch own videos ──────────────────────────────────────────
+  const fetchMyVideos = useCallback(async () => {
+    if (!athlete?.id) return;
+    setLoadingVideos(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/videos/mine?athlete_id=${athlete.id}`,
+      );
+      const data = await res.json();
+      if (res.ok && data.data) {
+        // Generate thumbnails in parallel
+        const videosWithThumbs = await Promise.all(
+          data.data.map(async (v: VideoItem) => ({
+            ...v,
+            thumbnail: await generateThumbnail(v.url),
+          })),
+        );
+        setMyVideos(videosWithThumbs);
+      }
+    } catch {
+    } finally {
+      setLoadingVideos(false);
+    }
+  }, [athlete?.id]);
+
+  useEffect(() => {
+    fetchMyVideos();
+  }, [fetchMyVideos]);
+
+  function showToast() {
+    setSuccessToast(true);
+    setTimeout(() => setSuccessToast(false), 3000);
+  }
+
+  // ── Pick from gallery ─────────────────────────────────────────
   async function handleUpload() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -72,20 +562,16 @@ export default function CreateScreen() {
       quality: 1,
       videoMaxDuration: 120,
     });
-
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-
-      // Check file size — reject if over 50MB
       if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
         const sizeMB = (asset.fileSize / (1024 * 1024)).toFixed(1);
         Alert.alert(
           "Video Too Large",
-          `Your video is ${sizeMB}MB. Maximum allowed size is 50MB.\n\nTip: Trim your video or reduce quality before uploading.`,
+          `Your video is ${sizeMB}MB. Maximum is 50MB.\n\nTip: Trim or compress before uploading.`,
         );
         return;
       }
-
       setVideoUri(asset.uri);
       setVideoSize(
         asset.fileSize
@@ -96,32 +582,26 @@ export default function CreateScreen() {
     }
   }
 
-  // ── Start camera ────────────────────────────────────────────
+  // ── Start camera ──────────────────────────────────────────────
   async function handleRecord() {
     if (!cameraPermission?.granted) {
       const res = await requestCameraPermission();
       if (!res.granted) {
-        Alert.alert(
-          "Permission needed",
-          "Camera access is required to record.",
-        );
+        Alert.alert("Permission needed", "Camera access is required.");
         return;
       }
     }
     if (!micPermission?.granted) {
       const res = await requestMicPermission();
       if (!res.granted) {
-        Alert.alert(
-          "Permission needed",
-          "Microphone access is required to record.",
-        );
+        Alert.alert("Permission needed", "Microphone access is required.");
         return;
       }
     }
     setMode("record");
   }
 
-  // ── Toggle recording ────────────────────────────────────────
+  // ── Toggle recording ──────────────────────────────────────────
   async function toggleRecording() {
     if (!cameraRef.current) return;
     if (isRecording) {
@@ -141,7 +621,7 @@ export default function CreateScreen() {
     }
   }
 
-  // ── Upload to backend ───────────────────────────────────────
+  // ── Upload to backend ─────────────────────────────────────────
   async function handlePost() {
     if (!videoUri) return;
     if (!athlete?.id) {
@@ -153,18 +633,16 @@ export default function CreateScreen() {
     setUploadStep(0);
     setUploadProgress(0);
 
-    // Animate steps while uploading
     const stepInterval = setInterval(() => {
       setUploadStep((s) => {
         const next = s + 1;
-        setUploadProgress((next / UPLOAD_STEPS.length) * 85); // goes to 85% then jumps to 100 on success
+        setUploadProgress((next / UPLOAD_STEPS.length) * 85);
         if (next >= UPLOAD_STEPS.length - 1) clearInterval(stepInterval);
         return next;
       });
     }, 900);
 
     try {
-      // Build multipart form
       const formData = new FormData();
       const filename = videoUri.split("/").pop() || "video.mp4";
       const ext = filename.split(".").pop()?.toLowerCase() || "mp4";
@@ -188,65 +666,44 @@ export default function CreateScreen() {
       const response = await fetch(`${API_BASE_URL}/api/videos/upload`, {
         method: "POST",
         body: formData,
-        // Don't set Content-Type — fetch sets it with boundary automatically for FormData
       });
-
       clearInterval(stepInterval);
 
       if (response.ok) {
         setUploadProgress(100);
-        setMode("done");
         setVideoUri(null);
         setVideoSize(null);
         setCaption("");
+        setMode("menu");
+        fetchMyVideos();
+        showToast();
       } else {
         const data = await response.json();
         setMode("preview");
-        Alert.alert("Upload failed", data.message || "Please try again.");
+        if (data.code === "CONTENT_REJECTED") {
+          Alert.alert(
+            "⚠️ Inappropriate Content",
+            "Your video was rejected. Only sports content is allowed.",
+            [{ text: "Understood" }],
+          );
+        } else if (data.code === "NOT_SPORTS_CONTENT") {
+          Alert.alert(
+            "🏅 Sports Content Only",
+            data.message || "Please upload sports content only.",
+            [{ text: "OK" }],
+          );
+        } else {
+          Alert.alert("Upload Failed", data.message || "Please try again.");
+        }
       }
-    } catch (err) {
+    } catch {
       clearInterval(stepInterval);
       setMode("preview");
-      Alert.alert(
-        "Connection Error",
-        "Make sure backend is running and connected.",
-      );
+      Alert.alert("Connection Error", "Make sure backend is running.");
     }
   }
 
-  // ── DONE screen ─────────────────────────────────────────────
-  if (mode === "done") {
-    return (
-      <View style={styles.root}>
-        <StatusBar hidden={true} />
-        <View style={styles.doneContainer}>
-          <View style={styles.doneIcon}>
-            <Text style={styles.doneCheck}>✓</Text>
-          </View>
-          <Text style={styles.doneTitle}>Video Posted!</Text>
-          <Text style={styles.doneSub}>
-            Your video is live on The Next Olympian
-          </Text>
-          <TouchableOpacity
-            style={styles.doneBtn}
-            onPress={() => setMode("menu")}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.doneBtnText}>POST ANOTHER</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.doneSecondary}
-            onPress={() => router.push("/(tabs)")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.doneSecondaryText}>Go to Home Feed</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // ── UPLOADING screen ─────────────────────────────────────────
+  // ── UPLOADING screen ──────────────────────────────────────────
   if (mode === "uploading") {
     return (
       <View style={styles.root}>
@@ -254,10 +711,12 @@ export default function CreateScreen() {
         <View style={styles.uploadingContainer}>
           <ActivityIndicator color="#EF4444" size="large" />
           <Text style={styles.uploadingStep}>{UPLOAD_STEPS[uploadStep]}</Text>
-          {/* Progress bar */}
           <View style={styles.progressBar}>
             <View
-              style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+              style={[
+                styles.progressFill,
+                { width: `${uploadProgress}%` as any },
+              ]}
             />
           </View>
           <Text style={styles.progressPct}>{Math.round(uploadProgress)}%</Text>
@@ -266,7 +725,7 @@ export default function CreateScreen() {
     );
   }
 
-  // ── RECORD screen ────────────────────────────────────────────
+  // ── RECORD screen ─────────────────────────────────────────────
   if (mode === "record") {
     return (
       <View style={styles.root}>
@@ -277,7 +736,6 @@ export default function CreateScreen() {
           facing="back"
           mode="video"
         >
-          {/* Top bar */}
           <View style={styles.cameraTopBar}>
             <TouchableOpacity
               style={styles.cameraCloseBtn}
@@ -296,8 +754,6 @@ export default function CreateScreen() {
             </View>
             <View style={{ width: 36 }} />
           </View>
-
-          {/* Record button */}
           <View style={styles.cameraBottomBar}>
             <TouchableOpacity
               style={styles.recordBtnOuter}
@@ -320,7 +776,7 @@ export default function CreateScreen() {
     );
   }
 
-  // ── PREVIEW / CAPTION screen ─────────────────────────────────
+  // ── PREVIEW / CAPTION screen ──────────────────────────────────
   if (mode === "preview") {
     return (
       <View style={styles.root}>
@@ -330,7 +786,6 @@ export default function CreateScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.previewHeader}>
             <TouchableOpacity
               onPress={() => setMode("menu")}
@@ -342,13 +797,14 @@ export default function CreateScreen() {
             <View style={{ width: 36 }} />
           </View>
 
-          {/* Video preview placeholder */}
-          <View style={styles.videoThumb}>
-            <Text style={styles.videoThumbIcon}>🎬</Text>
-            <Text style={styles.videoThumbText}>Video Selected</Text>
-            <Text style={styles.videoThumbSub}>
-              {videoUri?.split("/").pop()}
-            </Text>
+          {/* Live video preview */}
+          <View style={styles.videoPreviewWrap}>
+            <VideoView
+              player={previewPlayer}
+              style={styles.videoPreview}
+              contentFit="cover"
+              nativeControls={true}
+            />
             {videoSize && (
               <View style={styles.sizeBadge}>
                 <Text style={styles.sizeBadgeText}>{videoSize} / 50MB max</Text>
@@ -356,7 +812,6 @@ export default function CreateScreen() {
             )}
           </View>
 
-          {/* Caption */}
           <View style={styles.captionSection}>
             <Text style={styles.captionLabel}>CAPTION</Text>
             <TextInput
@@ -373,7 +828,6 @@ export default function CreateScreen() {
             <Text style={styles.captionCount}>{caption.length}/300</Text>
           </View>
 
-          {/* Info card */}
           <View style={styles.infoCard}>
             <Text style={styles.infoCardRow}>
               🏅 Sport:{" "}
@@ -387,7 +841,6 @@ export default function CreateScreen() {
             </Text>
           </View>
 
-          {/* Post button */}
           <TouchableOpacity
             style={styles.postBtn}
             onPress={handlePost}
@@ -395,17 +848,33 @@ export default function CreateScreen() {
           >
             <Text style={styles.postBtnText}>POST VIDEO</Text>
           </TouchableOpacity>
-
           <View style={{ height: 30 }} />
         </ScrollView>
       </View>
     );
   }
 
-  // ── MENU screen (default) ────────────────────────────────────
+  // ── MENU screen ───────────────────────────────────────────────
   return (
     <View style={styles.root}>
       <StatusBar hidden={true} />
+
+      {/* Success toast */}
+      {successToast && (
+        <View style={styles.toast}>
+          <Text style={styles.toastText}>✓ Video posted successfully!</Text>
+        </View>
+      )}
+
+      {/* Personal feed modal */}
+      <PersonalFeedModal
+        visible={feedOpen}
+        videos={myVideos}
+        startIndex={feedStartIndex}
+        onClose={() => setFeedOpen(false)}
+        athlete={athlete}
+      />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -447,6 +916,68 @@ export default function CreateScreen() {
           <Text style={styles.cardSub}>Choose a video from your gallery</Text>
         </TouchableOpacity>
 
+        {/* ── MY VIDEOS ── */}
+        <View style={styles.galleryHeader}>
+          <Text style={styles.galleryTitle}>MY VIDEOS</Text>
+          <Text style={styles.galleryCount}>{myVideos.length} posted</Text>
+        </View>
+
+        {loadingVideos ? (
+          <View style={styles.galleryLoading}>
+            <ActivityIndicator color="#EF4444" size="small" />
+            <Text style={styles.galleryLoadingText}>
+              Loading your videos...
+            </Text>
+          </View>
+        ) : myVideos.length === 0 ? (
+          <View style={styles.galleryEmpty}>
+            <Text style={styles.galleryEmptyIcon}>🎬</Text>
+            <Text style={styles.galleryEmptyText}>
+              No videos yet — post your first one!
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.galleryGrid}>
+            {myVideos.map((video) => (
+              <TouchableOpacity
+                key={video.id}
+                style={styles.thumbCard}
+                onPress={() => {
+                  setFeedStartIndex(myVideos.indexOf(video));
+                  setFeedOpen(true);
+                }}
+                activeOpacity={0.85}
+              >
+                {/* Real thumbnail from first frame */}
+                {video.thumbnail ? (
+                  <Image
+                    source={{ uri: video.thumbnail }}
+                    style={styles.thumbImg}
+                  />
+                ) : (
+                  <View style={styles.thumbPlaceholder}>
+                    <Text style={styles.thumbPlaceholderIcon}>🎬</Text>
+                  </View>
+                )}
+                {/* Play overlay */}
+                <View style={styles.thumbOverlay}>
+                  <View style={styles.thumbPlayBtn}>
+                    <Text style={styles.thumbPlayIcon}>▶</Text>
+                  </View>
+                </View>
+                {/* Caption */}
+                {video.caption ? (
+                  <View style={styles.thumbCaptionBar}>
+                    <Text style={styles.thumbCaption} numberOfLines={1}>
+                      {video.caption}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* Pro tips */}
         <View style={styles.tipsCard}>
           <Text style={styles.tipsTitle}>✨ PRO TIPS</Text>
@@ -458,13 +989,12 @@ export default function CreateScreen() {
           ))}
         </View>
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: 30 }} />
       </ScrollView>
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0A0A0A" },
   content: { paddingBottom: 10 },
@@ -479,7 +1009,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
   },
-
   hero: { alignItems: "center", marginBottom: 28, paddingHorizontal: 20 },
   heroTitle: {
     fontSize: 26,
@@ -538,6 +1067,105 @@ const styles = StyleSheet.create({
   },
   cardSub: { color: "#666", fontSize: 13 },
 
+  // Gallery
+  galleryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  galleryTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#CCC",
+    letterSpacing: 2,
+  },
+  galleryCount: { fontSize: 12, color: "#555" },
+  galleryLoading: {
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  galleryLoadingText: { color: "#555", fontSize: 13 },
+  galleryEmpty: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    backgroundColor: "#141414",
+    borderWidth: 0.5,
+    borderColor: "#222",
+    borderRadius: 14,
+    padding: 28,
+    alignItems: "center",
+    gap: 10,
+  },
+  galleryEmptyIcon: { fontSize: 36 },
+  galleryEmptyText: { color: "#555", fontSize: 13, textAlign: "center" },
+  galleryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 20,
+    gap: 6,
+    marginBottom: 24,
+  },
+  thumbCard: {
+    width: THUMB_SIZE,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#141414",
+  },
+  thumbImg: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE * 1.4,
+    resizeMode: "cover",
+  },
+  thumbPlaceholder: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE * 1.4,
+    backgroundColor: "#1C1C1C",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbPlaceholderIcon: { fontSize: 28 },
+  thumbOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbPlayBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbPlayIcon: { color: "#fff", fontSize: 14, marginLeft: 2 },
+  thumbCaptionBar: {
+    backgroundColor: "#0A0A0A",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  thumbCaption: { fontSize: 10, color: "#666" },
+
+  // Toast
+  toast: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 100,
+    backgroundColor: "#0d2a0d",
+    borderWidth: 1,
+    borderColor: "#22c55e",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+  },
+  toastText: { color: "#22c55e", fontSize: 14, fontWeight: "700" },
+
+  // Tips
   tipsCard: {
     marginHorizontal: 20,
     backgroundColor: "#111",
@@ -638,31 +1266,25 @@ const styles = StyleSheet.create({
   },
   backBtn: { color: "#CCC", fontSize: 24 },
   previewTitle: { color: "#F5F5F5", fontSize: 16, fontWeight: "700" },
-  videoThumb: {
+  videoPreviewWrap: {
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: "#1C1C1C",
     borderRadius: 14,
-    height: 200,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 0.5,
-    borderColor: "#333",
-  },
-  videoThumbIcon: { fontSize: 48 },
-  videoThumbText: { color: "#F5F5F5", fontSize: 15, fontWeight: "700" },
-  videoThumbSub: { color: "#666", fontSize: 12 },
-  sizeBadge: {
+    overflow: "hidden",
+    height: 260,
     backgroundColor: "#1C1C1C",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderWidth: 0.5,
-    borderColor: "#333",
   },
-  sizeBadgeText: { color: "#888", fontSize: 12, fontWeight: "600" },
-
+  videoPreview: { width: "100%", height: 260 },
+  sizeBadge: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  sizeBadgeText: { color: "#CCC", fontSize: 11, fontWeight: "600" },
   captionSection: { marginHorizontal: 20, marginBottom: 16 },
   captionLabel: {
     fontSize: 11,
@@ -688,7 +1310,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
     marginTop: 4,
   },
-
   infoCard: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -701,7 +1322,6 @@ const styles = StyleSheet.create({
   },
   infoCardRow: { color: "#666", fontSize: 13 },
   infoVal: { color: "#CCC", fontWeight: "600" },
-
   postBtn: {
     marginHorizontal: 20,
     backgroundColor: "#D32F2F",
@@ -733,59 +1353,4 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: 4, backgroundColor: "#EF4444", borderRadius: 2 },
   progressPct: { color: "#666", fontSize: 13 },
-
-  // Done
-  doneContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  doneIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "rgba(211,47,47,0.15)",
-    borderWidth: 2,
-    borderColor: "#D32F2F",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  doneCheck: { fontSize: 32, color: "#EF4444" },
-  doneTitle: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#F5F5F5",
-    marginBottom: 8,
-  },
-  doneSub: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 32,
-  },
-  doneBtn: {
-    width: "100%",
-    backgroundColor: "#D32F2F",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  doneBtnText: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "700",
-    letterSpacing: 2,
-  },
-  doneSecondary: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#2A2A2A",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-  },
-  doneSecondaryText: { color: "#666", fontSize: 14, fontWeight: "600" },
 });

@@ -1,13 +1,19 @@
-import { ResizeMode, Video } from "expo-av";
+import { useFocusEffect } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
   FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   ViewToken,
@@ -18,6 +24,14 @@ import { useAuth } from "../../src/context/AuthContext";
 const { width, height } = Dimensions.get("window");
 
 // ── Types ─────────────────────────────────────────────────────
+interface Comment {
+  id: string;
+  athlete_id: string;
+  name: string;
+  text: string;
+  created_at: string;
+}
+
 interface VideoItem {
   id: string;
   url: string;
@@ -27,7 +41,7 @@ interface VideoItem {
   province: string;
   likes: number;
   comments: number;
-  shares: number;
+  views: number;
   uploaded_at: string;
   athletes: {
     id: string;
@@ -37,36 +51,400 @@ interface VideoItem {
   };
 }
 
-const CATEGORIES = [
-  "For You",
-  "Trending",
-  "Cricket",
-  "Football",
-  "Boxing",
-  "Athletics",
-  "Swimming",
-];
-
-// ── Single video card ─────────────────────────────────────────
-function VideoCard({ item, isActive }: { item: VideoItem; isActive: boolean }) {
-  const videoRef = useRef<Video>(null);
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
+// ── Comments Modal ────────────────────────────────────────────
+function CommentsModal({
+  visible,
+  videoId,
+  onClose,
+  athlete,
+}: {
+  visible: boolean;
+  videoId: string | null;
+  onClose: () => void;
+  athlete: any;
+}) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [total, setTotal] = useState(0);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
-    if (!videoRef.current) return;
-    if (isActive) {
-      videoRef.current.playAsync();
-    } else {
-      videoRef.current.pauseAsync();
-    }
-  }, [isActive]);
+    if (visible && videoId) fetchComments();
+  }, [visible, videoId]);
 
-  function formatHandle(name: string) {
-    return "@" + name?.toLowerCase().replace(/\s+/g, "_");
+  async function fetchComments() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/videos/${videoId}/comments`);
+      const data = await res.json();
+      if (res.ok) {
+        setComments(data.comments);
+        setTotal(data.total);
+      }
+    } catch {
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function formatCount(n: number) {
+  async function postComment() {
+    if (!text.trim() || !athlete?.id) return;
+    setPosting(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/videos/${videoId}/comments`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            athlete_id: athlete.id,
+            name: athlete.name,
+            text: text.trim(),
+          }),
+        },
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setComments((p) => [data.comment, ...p]);
+        setTotal((p) => p + 1);
+        setText("");
+      }
+    } catch {
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    try {
+      await fetch(
+        `${API_BASE_URL}/api/videos/${videoId}/comments/${commentId}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ athlete_id: athlete?.id }),
+        },
+      );
+      setComments((p) => p.filter((c) => c.id !== commentId));
+      setTotal((p) => Math.max(0, p - 1));
+    } catch {}
+  }
+
+  function timeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(mins / 60);
+    const days = Math.floor(hrs / 24);
+    if (days > 0) return `${days}d ago`;
+    if (hrs > 0) return `${hrs}h ago`;
+    if (mins > 0) return `${mins}m ago`;
+    return "just now";
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={cmtStyles.backdrop}
+        activeOpacity={1}
+        onPress={onClose}
+      />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={cmtStyles.sheet}
+      >
+        <View style={cmtStyles.header}>
+          <Text style={cmtStyles.headerTitle}>{total} Comments</Text>
+          <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+            <Text style={cmtStyles.closeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        {loading ? (
+          <View style={cmtStyles.loading}>
+            <ActivityIndicator color="#EF4444" />
+          </View>
+        ) : comments.length === 0 ? (
+          <View style={cmtStyles.empty}>
+            <Text style={cmtStyles.emptyIcon}>💬</Text>
+            <Text style={cmtStyles.emptyText}>
+              No comments yet — be the first!
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={cmtStyles.list}
+            showsVerticalScrollIndicator={false}
+          >
+            {comments.map((c) => (
+              <View key={c.id} style={cmtStyles.commentRow}>
+                <View style={cmtStyles.avatar}>
+                  <Text style={cmtStyles.avatarText}>
+                    {c.name?.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={cmtStyles.commentBody}>
+                  <View style={cmtStyles.commentTop}>
+                    <Text style={cmtStyles.commentName}>{c.name}</Text>
+                    <Text style={cmtStyles.commentTime}>
+                      {timeAgo(c.created_at)}
+                    </Text>
+                  </View>
+                  <Text style={cmtStyles.commentText}>{c.text}</Text>
+                </View>
+                {c.athlete_id === athlete?.id && (
+                  <TouchableOpacity
+                    onPress={() => deleteComment(c.id)}
+                    activeOpacity={0.7}
+                    style={cmtStyles.deleteBtn}
+                  >
+                    <Text style={cmtStyles.deleteIcon}>🗑</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            <View style={{ height: 20 }} />
+          </ScrollView>
+        )}
+        <View style={cmtStyles.inputRow}>
+          <View style={cmtStyles.inputAvatar}>
+            <Text style={cmtStyles.inputAvatarText}>
+              {athlete?.name?.charAt(0).toUpperCase() ?? "?"}
+            </Text>
+          </View>
+          <TextInput
+            style={cmtStyles.input}
+            placeholder="Add a comment..."
+            placeholderTextColor="#444"
+            value={text}
+            onChangeText={setText}
+            maxLength={300}
+            multiline
+          />
+          <TouchableOpacity
+            style={[
+              cmtStyles.sendBtn,
+              (!text.trim() || posting) && { opacity: 0.4 },
+            ]}
+            onPress={postComment}
+            disabled={!text.trim() || posting}
+            activeOpacity={0.8}
+          >
+            {posting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={cmtStyles.sendIcon}>➤</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const cmtStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheet: {
+    backgroundColor: "#141414",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.75,
+    borderTopWidth: 0.5,
+    borderColor: "#2A2A2A",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#2A2A2A",
+  },
+  headerTitle: { color: "#F5F5F5", fontSize: 15, fontWeight: "700" },
+  closeBtn: { color: "#666", fontSize: 18 },
+  loading: { height: 120, alignItems: "center", justifyContent: "center" },
+  empty: {
+    height: 140,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  emptyIcon: { fontSize: 32 },
+  emptyText: { color: "#555", fontSize: 13 },
+  list: { maxHeight: height * 0.5 },
+  commentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#1C1C1C",
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#D32F2F",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    flexShrink: 0,
+  },
+  avatarText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  commentBody: { flex: 1 },
+  commentTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  commentName: { color: "#F5F5F5", fontSize: 13, fontWeight: "700" },
+  commentTime: { color: "#555", fontSize: 11 },
+  commentText: { color: "#CCC", fontSize: 13, lineHeight: 18 },
+  deleteBtn: { padding: 6 },
+  deleteIcon: { fontSize: 14 },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 10,
+    borderTopWidth: 0.5,
+    borderTopColor: "#2A2A2A",
+  },
+  inputAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#D32F2F",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  inputAvatarText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  input: {
+    flex: 1,
+    backgroundColor: "#1C1C1C",
+    borderWidth: 0.5,
+    borderColor: "#333",
+    borderRadius: 20,
+    color: "#F5F5F5",
+    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    maxHeight: 80,
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#D32F2F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendIcon: { color: "#fff", fontSize: 14 },
+});
+
+// ── Video Card ─────────────────────────────────────────────────
+function VideoCard({
+  item,
+  isActive,
+  athlete,
+  onCommentPress,
+  isFollowing,
+  onFollowToggle,
+  screenFocused,
+}: {
+  item: VideoItem;
+  isActive: boolean;
+  athlete: any;
+  onCommentPress: (id: string) => void;
+  isFollowing: boolean;
+  onFollowToggle: (athleteId: string) => void;
+  screenFocused: boolean;
+}) {
+  const player = useVideoPlayer(item.url, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  const [liked, setLiked] = useState(false);
+  const [likes, setLikes] = useState(item.likes ?? 0);
+  const [views, setViews] = useState(item.views ?? 0);
+  const [comments, setComments] = useState(item.comments ?? 0);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const viewTracked = useRef(false);
+  const isOwnVideo = athlete?.id === item.athletes?.id;
+
+  // Fetch like status
+  useEffect(() => {
+    if (!athlete?.id) return;
+    fetch(`${API_BASE_URL}/api/videos/${item.id}/like?athlete_id=${athlete.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.status === "success") {
+          setLiked(d.liked);
+          setLikes(d.likes);
+        }
+      })
+      .catch(() => {});
+  }, [item.id, athlete?.id]);
+
+  // Play/pause — respects both active index AND screen focus
+  useEffect(() => {
+    if (isActive && screenFocused) {
+      player.play();
+      if (!viewTracked.current) {
+        viewTracked.current = true;
+        fetch(`${API_BASE_URL}/api/videos/${item.id}/view`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ athlete_id: athlete?.id }),
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.status === "success") setViews(d.views);
+          })
+          .catch(() => {});
+      }
+    } else {
+      // Pause when scrolled away OR when navigating to another tab
+      player.pause();
+    }
+  }, [isActive, screenFocused]);
+
+  async function handleLike() {
+    if (!athlete?.id || likeLoading) return;
+    setLikeLoading(true);
+    const wasLiked = liked;
+    setLiked(!wasLiked);
+    setLikes((p) => (wasLiked ? Math.max(0, p - 1) : p + 1));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/videos/${item.id}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ athlete_id: athlete.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikes(data.likes);
+      } else {
+        setLiked(wasLiked);
+        setLikes((p) => (wasLiked ? p + 1 : Math.max(0, p - 1)));
+      }
+    } catch {
+      setLiked(wasLiked);
+      setLikes((p) => (wasLiked ? p + 1 : Math.max(0, p - 1)));
+    } finally {
+      setLikeLoading(false);
+    }
+  }
+
+  function fmt(n: number) {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
     if (n >= 1000) return (n / 1000).toFixed(1) + "K";
     return String(n);
@@ -76,72 +454,80 @@ function VideoCard({ item, isActive }: { item: VideoItem; isActive: boolean }) {
     return s?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
+  function formatHandle(name: string) {
+    return "@" + name?.toLowerCase().replace(/\s+/g, "_");
+  }
+
   return (
     <View style={styles.videoCard}>
-      {/* ── Video player ── */}
-      <Video
-        ref={videoRef}
-        source={{ uri: item.url }}
+      <VideoView
+        player={player}
         style={styles.video}
-        resizeMode={ResizeMode.COVER}
-        isLooping
-        shouldPlay={isActive}
-        isMuted={false}
+        contentFit="cover"
+        nativeControls={false}
       />
 
-      {/* ── Dark gradient overlay ── */}
-      <View style={styles.overlay} />
-
-      {/* ── Right action bar ── */}
+      {/* Right action bar */}
       <View style={styles.actionBar}>
         {/* Like */}
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => setLiked((p) => !p)}
+          onPress={handleLike}
           activeOpacity={0.8}
+          disabled={likeLoading}
         >
-          <Text style={[styles.actionIcon, liked && styles.actionIconActive]}>
-            ♥
-          </Text>
-          <Text style={styles.actionCount}>
-            {formatCount(item.likes + (liked ? 1 : 0))}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Comment */}
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-          <Text style={styles.actionIcon}>💬</Text>
-          <Text style={styles.actionCount}>{formatCount(item.comments)}</Text>
-        </TouchableOpacity>
-
-        {/* Share */}
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-          <Text style={styles.actionIcon}>⬆</Text>
-          <Text style={styles.actionCount}>{formatCount(item.shares)}</Text>
-        </TouchableOpacity>
-
-        {/* Save */}
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => setSaved((p) => !p)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.actionIcon, saved && styles.actionIconActive]}>
-            🔖
-          </Text>
-          <Text style={styles.actionCount}>{saved ? "Saved" : "Save"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Bottom info ── */}
-      <View style={styles.videoInfo}>
-        {/* User row */}
-        <View style={styles.userRow}>
-          <View style={styles.avatarSmall}>
-            <Text style={styles.avatarSmallText}>
-              {item.athletes?.name?.charAt(0).toUpperCase() ?? "?"}
+          <View
+            style={[styles.actionIconWrap, liked && styles.actionIconWrapLiked]}
+          >
+            <Text style={[styles.actionIcon, liked && styles.actionIconLiked]}>
+              {liked ? "♥" : "♡"}
             </Text>
           </View>
+          <Text style={styles.actionCount}>{fmt(likes)}</Text>
+        </TouchableOpacity>
+
+        {/* Comments */}
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => onCommentPress(item.id)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.actionIconWrap}>
+            <Image
+              source={require("../../assets/icons/chat.png")}
+              style={styles.actionIconImg}
+            />
+          </View>
+          <Text style={styles.actionCount}>{fmt(comments)}</Text>
+        </TouchableOpacity>
+
+        {/* Views */}
+        <View style={styles.actionBtn}>
+          <View style={styles.actionIconWrap}>
+            <Image
+              source={require("../../assets/icons/eye.png")}
+              style={styles.actionIconImg}
+            />
+          </View>
+          <Text style={styles.actionCount}>{fmt(views)}</Text>
+        </View>
+      </View>
+
+      {/* Bottom info */}
+      <View style={styles.videoInfo}>
+        <View style={styles.userRow}>
+          {item.athletes?.photo_url ? (
+            <Image
+              source={{ uri: item.athletes.photo_url }}
+              style={styles.avatarSmall}
+            />
+          ) : (
+            <View style={styles.avatarSmall}>
+              <Text style={styles.avatarSmallText}>
+                {item.athletes?.name?.charAt(0).toUpperCase() ?? "?"}
+              </Text>
+            </View>
+          )}
           <Text style={styles.username}>
             {formatHandle(item.athletes?.name ?? "athlete")}
           </Text>
@@ -150,16 +536,29 @@ function VideoCard({ item, isActive }: { item: VideoItem; isActive: boolean }) {
               <Text style={styles.verifiedCheck}>✓</Text>
             </View>
           )}
+          {/* Follow button — hidden on own videos */}
+          {!isOwnVideo && (
+            <TouchableOpacity
+              style={[styles.followBtn, isFollowing && styles.followBtnActive]}
+              onPress={() => onFollowToggle(item.athletes?.id)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.followBtnText,
+                  isFollowing && styles.followBtnTextActive,
+                ]}
+              >
+                {isFollowing ? "Following" : "+ Follow"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
-
-        {/* Caption */}
         {item.caption ? (
           <Text style={styles.caption} numberOfLines={2}>
             {item.caption}
           </Text>
         ) : null}
-
-        {/* Tags row */}
         <View style={styles.tagsRow}>
           {item.sport ? (
             <View style={styles.tagRed}>
@@ -177,7 +576,7 @@ function VideoCard({ item, isActive }: { item: VideoItem; isActive: boolean }) {
   );
 }
 
-// ── Main Home Screen ──────────────────────────────────────────
+// ── Home Screen ───────────────────────────────────────────────
 export default function HomeScreen() {
   const { athlete } = useAuth();
 
@@ -187,77 +586,162 @@ export default function HomeScreen() {
   const [activeCategory, setActiveCategory] = useState("For You");
   const [activeIndex, setActiveIndex] = useState(0);
   const [error, setError] = useState("");
+  const [commentVideoId, setCommentVideoId] = useState<string | null>(null);
+  const [screenFocused, setScreenFocused] = useState(true);
 
-  // Fetch feed based on sport filter
+  // Pause video when navigating away, resume when coming back
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => {
+        // Cleanup — called when screen loses focus
+        setScreenFocused(false);
+      };
+    }, []),
+  );
+
+  // ── Shared follow state map: athleteId → boolean ─────────────
+  const [followMap, setFollowMap] = useState<Record<string, boolean>>({});
+
+  // Fetch initial follow status for all unique athletes in feed
+  async function fetchFollowStatuses(videoList: VideoItem[]) {
+    if (!athlete?.id) return;
+    const uniqueAthleteIds = [
+      ...new Set(
+        videoList
+          .map((v) => v.athletes?.id)
+          .filter((id) => id && id !== athlete.id),
+      ),
+    ];
+
+    await Promise.all(
+      uniqueAthleteIds.map(async (athleteId) => {
+        try {
+          const res = await fetch(
+            `${API_BASE_URL}/api/athletes/${athleteId}/stats?athlete_id=${athlete.id}`,
+          );
+          const data = await res.json();
+          if (res.ok) {
+            setFollowMap((prev) => ({
+              ...prev,
+              [athleteId]: data.isFollowing,
+            }));
+          }
+        } catch {}
+      }),
+    );
+  }
+
+  // Toggle follow — updates all cards for that athlete at once
+  async function handleFollowToggle(targetAthleteId: string) {
+    if (!athlete?.id || !targetAthleteId) return;
+
+    // Optimistic update across ALL cards
+    const wasFollowing = !!followMap[targetAthleteId];
+    setFollowMap((prev) => ({ ...prev, [targetAthleteId]: !wasFollowing }));
+
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/athletes/${targetAthleteId}/follow`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ athlete_id: athlete.id }),
+        },
+      );
+      const data = await res.json();
+      if (res.ok) {
+        // Confirm with server response
+        setFollowMap((prev) => ({
+          ...prev,
+          [targetAthleteId]: data.following,
+        }));
+      } else {
+        // Revert on failure
+        setFollowMap((prev) => ({ ...prev, [targetAthleteId]: wasFollowing }));
+      }
+    } catch {
+      setFollowMap((prev) => ({ ...prev, [targetAthleteId]: wasFollowing }));
+    }
+  }
+
   const fetchVideos = useCallback(
     async (category: string, isRefresh = false) => {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError("");
-
       try {
-        // "For You" = athlete's own sport, "Trending" = no filter (all sports)
-        let sportParam = "";
-        if (category === "For You" && athlete?.sport) {
-          sportParam = `?sport=${athlete.sport}`;
-        } else if (!["For You", "Trending"].includes(category)) {
-          sportParam = `?sport=${category.toLowerCase()}`;
+        let url = `${API_BASE_URL}/api/videos`;
+        const params = new URLSearchParams();
+
+        if (category === "For You") {
+          // Pass viewer_id only — backend handles 60/40 split
+          // Do NOT pass sport — For You should cross all sports
+          if (athlete?.id) params.set("viewer_id", athlete.id);
+        } else if (category === "Trending") {
+          // Sort by views — backend handles this
+          params.set("trending", "true");
+        } else {
+          // Sport tab — convert display name to DB value (e.g. "Table Tennis" → "table_tennis")
+          params.set("sport", category.toLowerCase().replace(/\s+/g, "_"));
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/videos${sportParam}`);
-        const data = await response.json();
+        const qs = params.toString();
+        if (qs) url += `?${qs}`;
 
+        const response = await fetch(url);
+        const data = await response.json();
         if (response.ok) {
           setVideos(data.data ?? []);
+          fetchFollowStatuses(data.data ?? []);
         } else {
           setError("Could not load feed.");
         }
       } catch {
-        setError("Cannot reach server. Make sure backend is running.");
+        setError("Cannot reach server.");
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [athlete?.sport],
+    [athlete?.id, athlete?.sport],
   );
 
   useEffect(() => {
     fetchVideos(activeCategory);
   }, [activeCategory]);
 
-  // Track which video is visible
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0) {
-        setActiveIndex(viewableItems[0].index ?? 0);
-      }
+      if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
     },
     [],
   );
 
-  const viewabilityConfig = { itemVisiblePercentThreshold: 60 };
-
-  // ── Empty state ──────────────────────────────────────────────
-  function EmptyFeed() {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🏅</Text>
-        <Text style={styles.emptyTitle}>No videos yet</Text>
-        <Text style={styles.emptyText}>
-          {activeCategory === "For You"
-            ? `Be the first to post a ${athlete?.sport?.replace(/_/g, " ")} video!`
-            : `No ${activeCategory} videos yet. Check back soon!`}
-        </Text>
-      </View>
-    );
-  }
+  const CATEGORIES = [
+    "For You",
+    "Trending",
+    "Cricket",
+    "Football",
+    "Tennis",
+    "Table Tennis",
+    "Swimming",
+    "Athletics",
+    "Hockey",
+    "Volleyball",
+    "Badminton",
+    "Boxing",
+    "Wrestling",
+    "Weightlifting",
+    "Cycling",
+    "Squash",
+  ];
 
   return (
     <View style={styles.root}>
       <StatusBar hidden={true} />
 
-      {/* Category pills — float over feed */}
+      {/* Category pills */}
       <View style={styles.categories}>
         <ScrollView
           horizontal
@@ -291,7 +775,6 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
-      {/* Loading */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator color="#EF4444" size="large" />
@@ -310,20 +793,36 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       ) : videos.length === 0 ? (
-        <EmptyFeed />
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🏅</Text>
+          <Text style={styles.emptyTitle}>No videos yet</Text>
+          <Text style={styles.emptyText}>
+            {activeCategory === "For You"
+              ? `Be the first to post a ${athlete?.sport?.replace(/_/g, " ")} video!`
+              : `No ${activeCategory} videos yet.`}
+          </Text>
+        </View>
       ) : (
         <FlatList
           data={videos}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => (
-            <VideoCard item={item} isActive={index === activeIndex} />
+            <VideoCard
+              item={item}
+              isActive={index === activeIndex}
+              athlete={athlete}
+              onCommentPress={(id) => setCommentVideoId(id)}
+              isFollowing={!!followMap[item.athletes?.id]}
+              onFollowToggle={handleFollowToggle}
+              screenFocused={screenFocused}
+            />
           )}
           pagingEnabled
           showsVerticalScrollIndicator={false}
           snapToInterval={height}
           decelerationRate="fast"
           onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
           getItemLayout={(_, index) => ({
             length: height,
             offset: height * index,
@@ -336,6 +835,13 @@ export default function HomeScreen() {
           windowSize={5}
         />
       )}
+
+      <CommentsModal
+        visible={!!commentVideoId}
+        videoId={commentVideoId}
+        onClose={() => setCommentVideoId(null)}
+        athlete={athlete}
+      />
     </View>
   );
 }
@@ -344,14 +850,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0A0A0A" },
 
-  // Categories
-  categories: {
-    position: "absolute",
-    top: 14,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
+  categories: { position: "absolute", top: 14, left: 0, right: 0, zIndex: 10 },
   catScroll: { paddingHorizontal: 14, gap: 8 },
   catPill: {
     flexDirection: "row",
@@ -368,41 +867,46 @@ const styles = StyleSheet.create({
   catText: { color: "#CCC", fontSize: 13, fontWeight: "600" },
   catTextActive: { color: "#0A0A0A" },
 
-  // Video card
-  videoCard: {
-    width,
-    height,
-    backgroundColor: "#111",
-  },
-  video: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "transparent",
-    // Gradient-like effect using multiple layers
-    borderBottomWidth: 0,
-  },
+  videoCard: { width, height, backgroundColor: "#111" },
+  video: { ...StyleSheet.absoluteFillObject },
 
-  // Action bar
   actionBar: {
     position: "absolute",
     right: 14,
     bottom: 130,
     alignItems: "center",
-    gap: 20,
+    gap: 18,
   },
-  actionBtn: { alignItems: "center", gap: 4 },
-  actionIcon: { fontSize: 30, color: "#fff" },
-  actionIconActive: { color: "#EF4444" },
-  actionCount: { fontSize: 12, color: "#fff", fontWeight: "600" },
+  actionBtn: { alignItems: "center", gap: 5 },
+  actionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionIconWrapLiked: {
+    backgroundColor: "rgba(239,68,68,0.2)",
+    borderColor: "rgba(239,68,68,0.4)",
+  },
+  actionIcon: { fontSize: 20, color: "#fff" },
+  actionIconLiked: { color: "#EF4444" },
+  actionIconImg: { width: 22, height: 22, tintColor: "#FFFFFF" },
+  actionCount: {
+    fontSize: 11,
+    color: "#fff",
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
 
-  // Video info
   videoInfo: {
     position: "absolute",
     bottom: 0,
     left: 0,
-    right: 80,
+    right: 70,
     padding: 16,
     paddingBottom: 24,
   },
@@ -411,6 +915,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 8,
+    flexWrap: "wrap",
   },
   avatarSmall: {
     width: 36,
@@ -421,6 +926,7 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   avatarSmallText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   username: { color: "#fff", fontSize: 15, fontWeight: "700" },
@@ -433,6 +939,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   verifiedCheck: { color: "#fff", fontSize: 9, fontWeight: "900" },
+
+  followBtn: {
+    borderWidth: 1,
+    borderColor: "#fff",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  followBtnActive: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  followBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  followBtnTextActive: { color: "rgba(255,255,255,0.6)" },
+
   caption: { color: "#fff", fontSize: 13, lineHeight: 18, marginBottom: 8 },
   tagsRow: { flexDirection: "row", gap: 6 },
   tagRed: {
@@ -452,7 +973,6 @@ const styles = StyleSheet.create({
   },
   tagDarkText: { color: "#CCC", fontSize: 11 },
 
-  // Loading / empty / error
   loadingContainer: {
     flex: 1,
     alignItems: "center",
