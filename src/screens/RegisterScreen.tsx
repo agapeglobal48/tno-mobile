@@ -456,7 +456,9 @@ export default function RegisterScreen() {
                 onPress={() => setShowPassword((p) => !p)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.eyeIcon}>{showPassword ? "🙈" : "👁️"}</Text>
+                <Text style={styles.eyeIcon}>
+                  {showPassword ? "HIDE" : "SHOW"}
+                </Text>
               </TouchableOpacity>
             </View>
           </Field>
@@ -483,7 +485,7 @@ export default function RegisterScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={styles.eyeIcon}>
-                  {showConfirmPassword ? "🙈" : "👁️"}
+                  {showConfirmPassword ? "HIDE" : "SHOW"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -849,7 +851,7 @@ const styles = StyleSheet.create({
   passwordRow: { position: "relative", justifyContent: "center" },
   passwordInput: { paddingRight: 50 },
   eyeBtn: { position: "absolute", right: 13, padding: 4 },
-  eyeIcon: { fontSize: 18 },
+  eyeIcon: { fontSize: 11, color: "#888", fontWeight: "700" },
 
   selectBtn: {
     flexDirection: "row",

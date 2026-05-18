@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Field from "../components/Field";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
@@ -20,6 +21,7 @@ import { useAuth } from "../context/AuthContext";
 export default function LoginScreen() {
   const router = useRouter();
   const { setAthlete } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -84,7 +86,7 @@ export default function LoginScreen() {
       >
         <StatusBar hidden={true} />
 
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <Image
             source={require("../../assets/icon.png")}
             style={styles.headerLogoImg}
@@ -166,7 +168,7 @@ export default function LoginScreen() {
                     activeOpacity={0.7}
                   >
                     <Text style={styles.eyeIcon}>
-                      {showPassword ? "🙈" : "👁️"}
+                      {showPassword ? "HIDE" : "SHOW"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -225,7 +227,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
     borderBottomWidth: 0.5,
     borderBottomColor: "#2A2A2A",
     backgroundColor: "#0A0A0A",
@@ -310,7 +313,7 @@ const styles = StyleSheet.create({
   passwordRow: { position: "relative", justifyContent: "center" },
   passwordInput: { paddingRight: 50 },
   eyeBtn: { position: "absolute", right: 13, padding: 4 },
-  eyeIcon: { fontSize: 18 },
+  eyeIcon: { fontSize: 11, color: "#888", fontWeight: "700" },
 
   loginBtn: {
     backgroundColor: "#D32F2F",

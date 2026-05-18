@@ -1,6 +1,8 @@
 import { Tabs } from "expo-router";
 import React from "react";
 import {
+  Image,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -9,25 +11,41 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ── Icons (pure text/emoji — no icon lib needed) ─────────────
-const TABS = [
-  { key: "index", icon: "⌂", iconActive: "⌂", label: "Home" },
-  { key: "discover", icon: "◎", iconActive: "◎", label: "Discover" },
-  { key: "create", icon: "+", iconActive: "+", label: "Create" },
-  { key: "trials", icon: "▦", iconActive: "▦", label: "Trials" },
-  { key: "profile", icon: "◯", iconActive: "◯", label: "Profile" },
-];
+// ── Nav icons ─────────────────────────────────────────────────
+const NAV_ICONS = {
+  home: require("../../assets/icons/nav-home.png"),
+  discover: require("../../assets/icons/nav-discover.png"),
+  trials: require("../../assets/icons/nav-trials.png"),
+  profile: require("../../assets/icons/nav-profile.png"),
+};
 
-function CustomTabBar({ state, descriptors, navigation }: any) {
+function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
 
+  const tabs = [
+    { key: "index", icon: NAV_ICONS.home, isCreate: false },
+    { key: "discover", icon: NAV_ICONS.discover, isCreate: false },
+    { key: "create", icon: null, isCreate: true },
+    { key: "trials", icon: NAV_ICONS.trials, isCreate: false },
+    { key: "profile", icon: NAV_ICONS.profile, isCreate: false },
+  ];
+
   return (
-    <View style={[styles.barWrap, { paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.barWrap,
+        {
+          paddingBottom: Math.max(
+            insets.bottom,
+            Platform.OS === "android" ? 8 : 4,
+          ),
+        },
+      ]}
+    >
       <View style={styles.bar}>
         {state.routes.map((route: any, i: number) => {
-          const tab = TABS[i];
+          const tab = tabs[i];
           const focused = state.index === i;
-          const isCreate = tab.key === "create";
 
           return (
             <TouchableOpacity
@@ -40,24 +58,23 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
                   target: route.key,
                   canPreventDefault: true,
                 });
-                if (!focused && !event.defaultPrevented)
+                if (!focused && !event.defaultPrevented) {
                   navigation.navigate(route.name);
+                }
               }}
             >
-              {isCreate ? (
-                // Centre create button — red circle
+              {tab.isCreate ? (
                 <View style={styles.createBtn}>
                   <Text style={styles.createIcon}>+</Text>
                 </View>
               ) : (
-                <>
-                  <Text style={[styles.icon, focused && styles.iconActive]}>
-                    {tab.icon}
-                  </Text>
-                  <Text style={[styles.label, focused && styles.labelActive]}>
-                    {tab.label}
-                  </Text>
-                </>
+                <Image
+                  source={tab.icon}
+                  style={[
+                    styles.navIcon,
+                    { tintColor: focused ? "#EF4444" : "#FFFFFF" },
+                  ]}
+                />
               )}
             </TouchableOpacity>
           );
@@ -93,31 +110,19 @@ const styles = StyleSheet.create({
   },
   bar: {
     flexDirection: "row",
-    height: 56,
+    height: 52,
     alignItems: "center",
   },
   tab: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
   },
-  icon: {
-    fontSize: 20,
-    color: "#FFFFFF",
+  navIcon: {
+    width: 26,
+    height: 26,
+    resizeMode: "contain",
   },
-  iconActive: {
-    color: "#EF4444",
-  },
-  label: {
-    fontSize: 10,
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  labelActive: {
-    color: "#EF4444",
-  },
-  // Create button
   createBtn: {
     width: 44,
     height: 44,
@@ -125,7 +130,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#D32F2F",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
     shadowColor: "#EF4444",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,

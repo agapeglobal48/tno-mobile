@@ -1,6 +1,13 @@
-import React, { createContext, ReactNode, useContext, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
-// ── Athlete type ──────────────────────────────────────────────
 export interface Athlete {
   id: string;
   name: string;
@@ -19,48 +26,76 @@ export interface Athlete {
   videos?: number;
 }
 
-// ── Context type ──────────────────────────────────────────────
 interface AuthContextType {
   athlete: Athlete | null;
+  isLoading: boolean;
   setAthlete: (athlete: Athlete | null) => void;
   updateAthlete: (updates: Partial<Athlete>) => void;
   logout: () => void;
 }
 
-// ── Create context ────────────────────────────────────────────
 const AuthContext = createContext<AuthContextType>({
   athlete: null,
+  isLoading: true,
   setAthlete: () => {},
   updateAthlete: () => {},
   logout: () => {},
 });
 
-// ── Provider ──────────────────────────────────────────────────
+const STORAGE_KEY = "@tno_athlete";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [athlete, setAthleteState] = useState<Athlete | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  function setAthlete(a: Athlete | null) {
+  // Load persisted athlete on app start
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((raw) => {
+        if (raw) {
+          try {
+            setAthleteState(JSON.parse(raw));
+          } catch {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const setAthlete = useCallback((a: Athlete | null) => {
     setAthleteState(a);
-  }
+    if (a) {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(a)).catch(() => {});
+    } else {
+      AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+    }
+  }, []);
 
-  function updateAthlete(updates: Partial<Athlete>) {
-    setAthleteState((prev) => (prev ? { ...prev, ...updates } : prev));
-  }
+  const updateAthlete = useCallback((updates: Partial<Athlete>) => {
+    setAthleteState((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...updates };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated)).catch(
+        () => {},
+      );
+      return updated;
+    });
+  }, []);
 
-  function logout() {
+  const logout = useCallback(() => {
     setAthleteState(null);
-  }
+    AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+  }, []);
 
   return (
     <AuthContext.Provider
-      value={{ athlete, setAthlete, updateAthlete, logout }}
+      value={{ athlete, isLoading, setAthlete, updateAthlete, logout }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
 
-// ── Hook ──────────────────────────────────────────────────────
 export function useAuth() {
   return useContext(AuthContext);
 }

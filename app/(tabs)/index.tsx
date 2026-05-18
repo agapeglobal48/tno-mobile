@@ -18,6 +18,7 @@ import {
   View,
   ViewToken,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../../src/config/api";
 import { useAuth } from "../../src/context/AuthContext";
 
@@ -310,7 +311,9 @@ const cmtStyles = StyleSheet.create({
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
     gap: 10,
     borderTopWidth: 0.5,
     borderTopColor: "#2A2A2A",
@@ -579,6 +582,7 @@ function VideoCard({
 // ── Home Screen ───────────────────────────────────────────────
 export default function HomeScreen() {
   const { athlete } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -665,8 +669,14 @@ export default function HomeScreen() {
     }
   }
 
+  const fetchControllerRef = useRef<AbortController | null>(null);
+
   const fetchVideos = useCallback(
     async (category: string, isRefresh = false) => {
+      // Cancel any in-flight request
+      if (fetchControllerRef.current) fetchControllerRef.current.abort();
+      fetchControllerRef.current = new AbortController();
+
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError("");
@@ -689,7 +699,9 @@ export default function HomeScreen() {
         const qs = params.toString();
         if (qs) url += `?${qs}`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          signal: fetchControllerRef.current?.signal,
+        });
         const data = await response.json();
         if (response.ok) {
           setVideos(data.data ?? []);
@@ -697,8 +709,8 @@ export default function HomeScreen() {
         } else {
           setError("Could not load feed.");
         }
-      } catch {
-        setError("Cannot reach server.");
+      } catch (err: any) {
+        if (err?.name !== "AbortError") setError("Cannot reach server.");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -741,8 +753,8 @@ export default function HomeScreen() {
     <View style={styles.root}>
       <StatusBar hidden={true} />
 
-      {/* Category pills */}
-      <View style={styles.categories}>
+      {/* Category pills — respect notch/dynamic island */}
+      <View style={[styles.categories, { top: insets.top + 8 }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -850,7 +862,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0A0A0A" },
 
-  categories: { position: "absolute", top: 14, left: 0, right: 0, zIndex: 10 },
+  categories: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 },
   catScroll: { paddingHorizontal: 14, gap: 8 },
   catPill: {
     flexDirection: "row",

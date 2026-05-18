@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -113,6 +114,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { athlete: contextAthlete, updateAthlete, logout } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [athlete, setAthleteLocal] = useState<Athlete | null>(null);
   const [stats, setStats] = useState({ followers: 0, following: 0, videos: 0 });
@@ -198,7 +200,7 @@ export default function ProfileScreen() {
         }
       >
         {/* ── Top bar ── */}
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <Text style={styles.handle}>{formatHandle(athlete.name)}</Text>
           <View style={styles.topActions}>
             <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
@@ -379,7 +381,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 18,
-    paddingTop: 16,
     paddingBottom: 10,
   },
   handle: {

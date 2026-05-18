@@ -896,22 +896,23 @@ export default function CreateScreen() {
           onPress={handleRecord}
           activeOpacity={0.85}
         >
-          <View style={styles.recordCircle}>
-            <Text style={styles.recordCircleIcon}>⏺</Text>
-          </View>
+          <Image
+            source={require("../../assets/icons/create-record.png")}
+            style={styles.createActionIcon}
+          />
           <Text style={styles.cardLabel}>RECORD</Text>
           <Text style={styles.cardSub}>Record directly with your camera</Text>
         </TouchableOpacity>
 
-        {/* Upload */}
         <TouchableOpacity
           style={styles.uploadCard}
           onPress={handleUpload}
           activeOpacity={0.85}
         >
-          <View style={styles.uploadCircle}>
-            <Text style={styles.uploadCircleIcon}>⬆</Text>
-          </View>
+          <Image
+            source={require("../../assets/icons/create-upload.png")}
+            style={styles.createActionIcon}
+          />
           <Text style={styles.cardLabel}>UPLOAD</Text>
           <Text style={styles.cardSub}>Choose a video from your gallery</Text>
         </TouchableOpacity>
@@ -1041,24 +1042,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  recordCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#D32F2F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  uploadCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#B8860B",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recordCircleIcon: { fontSize: 28, color: "#fff" },
-  uploadCircleIcon: { fontSize: 28, color: "#fff" },
+  createActionIcon: { width: 56, height: 56, resizeMode: "contain" },
   cardLabel: {
     color: "#F5F5F5",
     fontSize: 15,
