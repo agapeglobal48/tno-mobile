@@ -18,9 +18,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       segments[0] as string,
     );
     // Stack screens that are allowed while logged in (outside tabs)
-    const inStackScreen = ["edit-profile", "public-profile"].includes(
-      segments[0] as string,
-    );
+    const inStackScreen = [
+      "edit-profile",
+      "public-profile",
+      "forgot-password",
+    ].includes(segments[0] as string);
 
     if (athlete && !inTabsGroup && !inStackScreen) {
       // Logged in but not in tabs or an allowed stack screen → go to home feed
@@ -96,6 +98,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="edit-profile" />
               <Stack.Screen name="public-profile" />
+              <Stack.Screen name="forgot-password" />
             </Stack>
           </AuthGate>
           <StatusBar hidden={true} />

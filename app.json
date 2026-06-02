@@ -26,7 +26,11 @@
       },
       "package": "com.thenextolympian.app",
       "versionCode": 1,
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "jsEngine": "hermes",
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true,
+      "allowBackup": false
     },
     "plugins": [
       [

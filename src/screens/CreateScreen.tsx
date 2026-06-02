@@ -940,32 +940,80 @@ export default function CreateScreen() {
         ) : (
           <View style={styles.galleryGrid}>
             {myVideos.map((video) => (
-              <TouchableOpacity
-                key={video.id}
-                style={styles.thumbCard}
-                onPress={() => {
-                  setFeedStartIndex(myVideos.indexOf(video));
-                  setFeedOpen(true);
-                }}
-                activeOpacity={0.85}
-              >
-                {/* Real thumbnail from first frame */}
-                {video.thumbnail ? (
-                  <Image
-                    source={{ uri: video.thumbnail }}
-                    style={styles.thumbImg}
-                  />
-                ) : (
-                  <View style={styles.thumbPlaceholder}>
-                    <Text style={styles.thumbPlaceholderIcon}>🎬</Text>
+              <View key={video.id} style={styles.thumbCard}>
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    setFeedStartIndex(myVideos.indexOf(video));
+                    setFeedOpen(true);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  {/* Real thumbnail from first frame */}
+                  {video.thumbnail ? (
+                    <Image
+                      source={{ uri: video.thumbnail }}
+                      style={styles.thumbImg}
+                    />
+                  ) : (
+                    <View style={styles.thumbPlaceholder}>
+                      <Text style={styles.thumbPlaceholderIcon}>🎬</Text>
+                    </View>
+                  )}
+                  {/* Play overlay */}
+                  <View style={styles.thumbOverlay}>
+                    <View style={styles.thumbPlayBtn}>
+                      <Text style={styles.thumbPlayIcon}>▶</Text>
+                    </View>
                   </View>
-                )}
-                {/* Play overlay */}
-                <View style={styles.thumbOverlay}>
-                  <View style={styles.thumbPlayBtn}>
-                    <Text style={styles.thumbPlayIcon}>▶</Text>
-                  </View>
-                </View>
+                </TouchableOpacity>
+
+                {/* Delete button */}
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => {
+                    Alert.alert(
+                      "Delete Video",
+                      "Are you sure you want to delete this video? This cannot be undone.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: async () => {
+                            try {
+                              const res = await fetch(
+                                `${API_BASE_URL}/api/videos/${video.id}`,
+                                {
+                                  method: "DELETE",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    athlete_id: athlete?.id,
+                                  }),
+                                },
+                              );
+                              if (res.ok) {
+                                setMyVideos((prev) =>
+                                  prev.filter((v) => v.id !== video.id),
+                                );
+                              } else {
+                                Alert.alert("Error", "Could not delete video.");
+                              }
+                            } catch {
+                              Alert.alert("Error", "Connection failed.");
+                            }
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.deleteBtnText}>🗑</Text>
+                </TouchableOpacity>
+
                 {/* Caption */}
                 {video.caption ? (
                   <View style={styles.thumbCaptionBar}>
@@ -974,7 +1022,7 @@ export default function CreateScreen() {
                     </Text>
                   </View>
                 ) : null}
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -1099,6 +1147,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#141414",
   },
+  deleteBtn: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  deleteBtnText: { fontSize: 14 },
   thumbImg: {
     width: THUMB_SIZE,
     height: THUMB_SIZE * 1.4,

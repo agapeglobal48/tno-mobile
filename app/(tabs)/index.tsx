@@ -372,19 +372,21 @@ function VideoCard({
   const player = useVideoPlayer(item.url, (p) => {
     p.loop = true;
     p.muted = false;
+    p.playbackRate = 1.0;
   });
 
   const [liked, setLiked] = useState(false);
-  const [likes, setLikes] = useState(item.likes ?? 0);
-  const [views, setViews] = useState(item.views ?? 0);
+  const [likes, setLikes] = useState(0);
+  const [views, setViews] = useState(0);
   const [comments, setComments] = useState(item.comments ?? 0);
   const [likeLoading, setLikeLoading] = useState(false);
   const viewTracked = useRef(false);
   const isOwnVideo = athlete?.id === item.athletes?.id;
 
-  // Fetch like status
+  // Fetch real Redis counts + like status on mount
   useEffect(() => {
     if (!athlete?.id) return;
+    // Real like status + count from Redis
     fetch(`${API_BASE_URL}/api/videos/${item.id}/like?athlete_id=${athlete.id}`)
       .then((r) => r.json())
       .then((d) => {
@@ -392,6 +394,13 @@ function VideoCard({
           setLiked(d.liked);
           setLikes(d.likes);
         }
+      })
+      .catch(() => {});
+    // Real view count from Redis
+    fetch(`${API_BASE_URL}/api/videos/${item.id}/views`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.status === "success") setViews(d.views);
       })
       .catch(() => {});
   }, [item.id, athlete?.id]);
@@ -729,6 +738,14 @@ export default function HomeScreen() {
     },
     [],
   );
+
+  // Preload next video URL so it's ready before user scrolls to it
+  const nextVideoUrl = videos[activeIndex + 1]?.url;
+  useEffect(() => {
+    if (!nextVideoUrl) return;
+    // Trigger a HEAD request to warm up the CDN/connection
+    fetch(nextVideoUrl, { method: "HEAD" }).catch(() => {});
+  }, [nextVideoUrl]);
 
   const CATEGORIES = [
     "For You",
