@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -13,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Field from "../components/Field";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
@@ -21,8 +22,6 @@ import { useAuth } from "../context/AuthContext";
 export default function LoginScreen() {
   const router = useRouter();
   const { setAthlete } = useAuth();
-  const insets = useSafeAreaInsets();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -71,7 +70,7 @@ export default function LoginScreen() {
       }
     } catch (err) {
       setServerError(
-        "Cannot reach server. Make sure backend is running and IP is correct in src/config/api.ts",
+        "Unable to connect. Please check your internet connection and try again.",
       );
     } finally {
       setLoading(false);
@@ -79,14 +78,14 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <StatusBar hidden={true} />
 
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.header}>
           <Image
             source={require("../../assets/icon.png")}
             style={styles.headerLogoImg}
@@ -120,7 +119,10 @@ export default function LoginScreen() {
 
             {serverError ? (
               <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>⚠ {serverError}</Text>
+                <View style={styles.errorBannerRow}>
+                  <Ionicons name="warning-outline" size={15} color="#EF4444" />
+                  <Text style={styles.errorBannerText}>{serverError}</Text>
+                </View>
               </View>
             ) : null}
 
@@ -220,7 +222,7 @@ export default function LoginScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -235,6 +237,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
+    paddingTop: 10,
     paddingBottom: 14,
     borderBottomWidth: 0.5,
     borderBottomColor: "#2A2A2A",
@@ -299,7 +302,13 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
+  errorBannerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
   errorBannerText: {
+    flex: 1,
     color: "#EF4444",
     fontSize: 13,
     lineHeight: 18,

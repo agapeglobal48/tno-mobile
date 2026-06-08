@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -15,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Field from "../components/Field";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
@@ -158,13 +160,16 @@ export default function EditProfileScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        updateAthlete({ ...data.data, photo_url: newPhotoUrl });
+        updateAthlete({
+          ...data.data,
+          ...(newPhotoUrl ? { photo_url: newPhotoUrl } : {}),
+        });
         router.replace({ pathname: "/(tabs)/profile" });
       } else {
         Alert.alert("Error", data.message || "Could not save changes.");
       }
     } catch (err) {
-      Alert.alert("Connection Error", "Make sure the backend is running.");
+      Alert.alert("Connection Error", "Unable to connect. Please check your internet and try again.");
     } finally {
       setLoading(false);
     }
@@ -175,7 +180,7 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -234,7 +239,7 @@ export default function EditProfileScreen() {
                 </View>
               )}
               <View style={styles.cameraOverlay}>
-                <Text style={styles.cameraIcon}>📷</Text>
+                <Ionicons name="camera-outline" size={20} color="#fff" />
               </View>
             </TouchableOpacity>
             <Text style={styles.photoHint}>Tap to change photo</Text>
@@ -373,7 +378,7 @@ export default function EditProfileScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -438,7 +443,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0A0A0A",
   },
-  cameraIcon: { fontSize: 12 },
   photoHint: { color: "#555", fontSize: 12 },
 
   sectionLabel: {

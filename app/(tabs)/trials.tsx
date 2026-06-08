@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -9,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
 
@@ -22,7 +24,7 @@ const TRIALS = [
     title: "National Cricket Trials",
     subtitle: "Open Selection — All Provinces",
     sport: "Cricket",
-    sportEmoji: "🏏",
+    sportIcon: "cricket",
     date: "Dec 15, 2024",
     day: "15",
     month: "DEC",
@@ -41,7 +43,7 @@ const TRIALS = [
     title: "Provincial Football Cup",
     subtitle: "Punjab Regional Selection",
     sport: "Football",
-    sportEmoji: "⚽",
+    sportIcon: "soccer",
     date: "Jan 8, 2025",
     day: "08",
     month: "JAN",
@@ -60,7 +62,7 @@ const TRIALS = [
     title: "Karachi Boxing Championship",
     subtitle: "Sindh Provincial Qualifier",
     sport: "Boxing",
-    sportEmoji: "🥊",
+    sportIcon: "boxing-glove",
     date: "Jan 20, 2025",
     day: "20",
     month: "JAN",
@@ -79,7 +81,7 @@ const TRIALS = [
     title: "National Swimming Trials",
     subtitle: "Federal Level Selection",
     sport: "Swimming",
-    sportEmoji: "🏊",
+    sportIcon: "swim",
     date: "Feb 2, 2025",
     day: "02",
     month: "FEB",
@@ -98,7 +100,7 @@ const TRIALS = [
     title: "KPK Athletics Meet",
     subtitle: "Open Track & Field Trials",
     sport: "Athletics",
-    sportEmoji: "🏃",
+    sportIcon: "run",
     date: "Feb 15, 2025",
     day: "15",
     month: "FEB",
@@ -147,11 +149,12 @@ function FeaturedCard({
       {/* Header row */}
       <View style={feat.header}>
         <View style={feat.sportBadge}>
-          <Text style={feat.sportEmoji}>{trial.sportEmoji}</Text>
+          <MaterialCommunityIcons name={trial.sportIcon as any} size={14} color="#EF4444" />
           <Text style={feat.sportName}>{trial.sport}</Text>
         </View>
         <View style={feat.featuredBadge}>
-          <Text style={feat.featuredText}>⭐ FEATURED</Text>
+          <Ionicons name="star" size={10} color="#F59E0B" />
+          <Text style={feat.featuredText}>FEATURED</Text>
         </View>
       </View>
 
@@ -162,19 +165,19 @@ function FeaturedCard({
       {/* Date / Time / Venue row */}
       <View style={feat.infoGrid}>
         <View style={feat.infoBox}>
-          <Text style={feat.infoIcon}>📅</Text>
+          <Ionicons name="calendar-outline" size={16} color="#EF4444" />
           <Text style={feat.infoLabel}>DATE</Text>
           <Text style={feat.infoValue}>{trial.date}</Text>
         </View>
         <View style={feat.infoDivider} />
         <View style={feat.infoBox}>
-          <Text style={feat.infoIcon}>🕐</Text>
+          <Ionicons name="time-outline" size={16} color="#EF4444" />
           <Text style={feat.infoLabel}>TIME</Text>
           <Text style={feat.infoValue}>{trial.time}</Text>
         </View>
         <View style={feat.infoDivider} />
         <View style={feat.infoBox}>
-          <Text style={feat.infoIcon}>🏆</Text>
+          <MaterialCommunityIcons name="trophy" size={16} color="#EF4444" />
           <Text style={feat.infoLabel}>PRIZE</Text>
           <Text style={feat.infoValue}>{trial.prize}</Text>
         </View>
@@ -182,7 +185,7 @@ function FeaturedCard({
 
       {/* Venue */}
       <View style={feat.venueRow}>
-        <Text style={feat.venueIcon}>📍</Text>
+        <Ionicons name="location-outline" size={13} color="#666" />
         <Text style={feat.venueText}>{trial.venue}</Text>
       </View>
 
@@ -208,9 +211,17 @@ function FeaturedCard({
         onPress={() => onRegister(trial.id)}
         activeOpacity={0.85}
       >
-        <Text style={feat.registerText}>
-          {trial.registered ? "✓  Registered" : "Register Now  →"}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {trial.registered
+            ? <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+            : null}
+          <Text style={[feat.registerText, trial.registered && { color: "#22c55e" }]}>
+            {trial.registered ? "Registered" : "Register Now"}
+          </Text>
+          {!trial.registered
+            ? <Ionicons name="arrow-forward" size={14} color="#fff" />
+            : null}
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -368,14 +379,14 @@ function TrialCard({
       <View style={card.content}>
         {/* Sport + status badges */}
         <View style={card.badgeRow}>
-          <View style={card.sportPill}>
-            <Text style={card.sportPillText}>
-              {trial.sportEmoji} {trial.sport}
-            </Text>
+          <View style={[card.sportPill, { flexDirection: "row", alignItems: "center", gap: 4 }]}>
+            <MaterialCommunityIcons name={trial.sportIcon as any} size={10} color="#EF4444" />
+            <Text style={card.sportPillText}>{trial.sport}</Text>
           </View>
           {trial.registered && (
-            <View style={card.regPill}>
-              <Text style={card.regPillText}>✓ Registered</Text>
+            <View style={[card.regPill, { flexDirection: "row", alignItems: "center", gap: 3 }]}>
+              <Ionicons name="checkmark-circle" size={10} color="#22c55e" />
+              <Text style={card.regPillText}>Registered</Text>
             </View>
           )}
           {isCompleted && (
@@ -386,8 +397,9 @@ function TrialCard({
           {!isCompleted &&
             trial.spotsLeft / trial.spotsTotal <= 0.2 &&
             trial.spotsLeft > 0 && (
-              <View style={card.hotPill}>
-                <Text style={card.hotPillText}>🔥 Hot</Text>
+              <View style={[card.hotPill, { flexDirection: "row", alignItems: "center", gap: 3 }]}>
+                <MaterialCommunityIcons name="fire" size={10} color="#F59E0B" />
+                <Text style={card.hotPillText}>Hot</Text>
               </View>
             )}
         </View>
@@ -397,19 +409,19 @@ function TrialCard({
 
         {/* Info rows */}
         <View style={card.infoRow}>
-          <Text style={card.infoIcon}>🕐</Text>
+          <Ionicons name="time-outline" size={11} color="#666" />
           <Text style={card.infoText}>
             {trial.time} · {trial.province}
           </Text>
         </View>
         <View style={card.infoRow}>
-          <Text style={card.infoIcon}>📍</Text>
+          <Ionicons name="location-outline" size={11} color="#666" />
           <Text style={card.infoText} numberOfLines={1}>
             {trial.venue}
           </Text>
         </View>
         <View style={card.infoRow}>
-          <Text style={card.infoIcon}>🏆</Text>
+          <MaterialCommunityIcons name="trophy" size={11} color="#666" />
           <Text style={card.infoText}>{trial.prize}</Text>
         </View>
 
@@ -572,16 +584,35 @@ const stats = StyleSheet.create({
 });
 
 // ── Main screen ───────────────────────────────────────────────
+const REGISTERED_KEY = "@tno_registered_trials";
+
 export default function TrialsScreen() {
-  const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState("All");
   const [trials, setTrials] = useState(TRIALS);
   const [loading, setLoading] = useState(false);
 
+  // Persist registration state across app restarts
+  useEffect(() => {
+    AsyncStorage.getItem(REGISTERED_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const registeredIds: string[] = JSON.parse(raw);
+        setTrials((prev) =>
+          prev.map((t) => ({ ...t, registered: registeredIds.includes(t.id) })),
+        );
+      })
+      .catch(() => {});
+  }, []);
+
   function handleRegister(id: string) {
-    setTrials((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, registered: !t.registered } : t)),
-    );
+    setTrials((prev) => {
+      const updated = prev.map((t) =>
+        t.id === id ? { ...t, registered: !t.registered } : t,
+      );
+      const registeredIds = updated.filter((t) => t.registered).map((t) => t.id);
+      AsyncStorage.setItem(REGISTERED_KEY, JSON.stringify(registeredIds)).catch(() => {});
+      return updated;
+    });
   }
 
   const filtered = trials.filter((t) => {
@@ -597,7 +628,7 @@ export default function TrialsScreen() {
   const regular = filtered.filter((t) => !t.featured);
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
 
       <FlatList
@@ -607,14 +638,14 @@ export default function TrialsScreen() {
         ListHeaderComponent={
           <>
             {/* Header */}
-            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+            <View style={styles.header}>
               <View>
                 <Text style={styles.heading}>TRIALS &</Text>
                 <Text style={styles.headingAccent}>EVENTS</Text>
               </View>
               <View style={styles.headerRight}>
                 <Text style={styles.headerSub}>Pakistan Sports Initiative</Text>
-                <Text style={styles.headerEmoji}>🏅</Text>
+                <MaterialCommunityIcons name="trophy" size={28} color="#EF4444" />
               </View>
             </View>
 
@@ -653,7 +684,10 @@ export default function TrialsScreen() {
             {/* Featured card */}
             {featured.length > 0 && (
               <>
-                <Text style={styles.sectionLabel}>⭐ FEATURED</Text>
+                <View style={styles.sectionLabelRow}>
+                  <Ionicons name="star" size={13} color="#F59E0B" />
+                  <Text style={styles.sectionLabel}>FEATURED</Text>
+                </View>
                 {featured.map((t) => (
                   <FeaturedCard
                     key={t.id}
@@ -666,7 +700,10 @@ export default function TrialsScreen() {
 
             {/* Timeline label */}
             {regular.length > 0 && (
-              <Text style={styles.sectionLabel}>📅 UPCOMING EVENTS</Text>
+              <View style={styles.sectionLabelRow}>
+                <Ionicons name="calendar-outline" size={13} color="#666" />
+                <Text style={styles.sectionLabel}>UPCOMING EVENTS</Text>
+              </View>
             )}
           </>
         }
@@ -675,7 +712,7 @@ export default function TrialsScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🏟</Text>
+            <MaterialCommunityIcons name="stadium-outline" size={48} color="#333" />
             <Text style={styles.emptyTitle}>No trials found</Text>
             <Text style={styles.emptyText}>Check back soon for new events</Text>
           </View>
@@ -683,7 +720,7 @@ export default function TrialsScreen() {
         ListFooterComponent={<View style={{ height: 30 }} />}
         contentContainerStyle={{ paddingBottom: 10 }}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -695,6 +732,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 20,
   },
   heading: {
@@ -713,7 +751,6 @@ const styles = StyleSheet.create({
   },
   headerRight: { alignItems: "flex-end", gap: 4 },
   headerSub: { color: "#555", fontSize: 10, letterSpacing: 0.5 },
-  headerEmoji: { fontSize: 28 },
 
   filterRow: { marginBottom: 20 },
   filterScroll: { paddingHorizontal: 20, gap: 8 },
@@ -729,13 +766,18 @@ const styles = StyleSheet.create({
   filterText: { color: "#666", fontSize: 13, fontWeight: "600" },
   filterTextActive: { color: "#fff" },
 
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 20,
+    marginBottom: 14,
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
     color: "#555",
     letterSpacing: 2,
-    marginHorizontal: 20,
-    marginBottom: 14,
   },
 
   empty: {
@@ -744,7 +786,6 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     gap: 12,
   },
-  emptyIcon: { fontSize: 48 },
   emptyTitle: { color: "#F5F5F5", fontSize: 18, fontWeight: "800" },
   emptyText: { color: "#555", fontSize: 13 },
 });

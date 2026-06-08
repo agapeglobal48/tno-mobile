@@ -1,7 +1,14 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import * as VideoThumbnails from "expo-video-thumbnails";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
   Image,
+  Modal,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -10,11 +17,24 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 
+const { width, height } = Dimensions.get("window");
+const THUMB_SIZE = (width - 52) / 3;
+
 // ── Types ────────────────────────────────────────────────────
+interface VideoItem {
+  id: string;
+  url: string;
+  caption: string;
+  sport: string;
+  likes: number;
+  views: number;
+  uploaded_at: string;
+}
+
 interface Athlete {
   id: string;
   name: string;
@@ -48,6 +68,301 @@ function formatCount(n: number) {
   return String(n);
 }
 
+// ── Video thumbnail card ──────────────────────────────────────
+function VideoThumb({ item, onPress }: { item: VideoItem; onPress: () => void }) {
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    VideoThumbnails.getThumbnailAsync(item.url, { time: 0 })
+      .then(({ uri }) => { if (!cancelled) setThumb(uri); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [item.url]);
+
+  function fmt(n: number) {
+    if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+    return String(n);
+  }
+
+  return (
+    <TouchableOpacity style={vGrid.card} onPress={onPress} activeOpacity={0.85}>
+      <View style={vGrid.bg}>
+        {loading ? (
+          <ActivityIndicator color="#EF4444" size="small" />
+        ) : thumb ? (
+          <Image source={{ uri: thumb }} style={vGrid.img} />
+        ) : (
+          <Ionicons name="videocam-outline" size={28} color="#333" />
+        )}
+        <View style={vGrid.playOverlay}>
+          <View style={vGrid.playCircle}>
+            <Ionicons name="play" size={12} color="#fff" />
+          </View>
+        </View>
+        <View style={vGrid.viewsBadge}>
+          <Ionicons name="eye-outline" size={9} color="#fff" />
+          <Text style={vGrid.viewsText}>{fmt(item.views ?? 0)}</Text>
+        </View>
+      </View>
+      {item.caption ? (
+        <Text style={vGrid.caption} numberOfLines={1}>{item.caption}</Text>
+      ) : null}
+    </TouchableOpacity>
+  );
+}
+
+const vGrid = StyleSheet.create({
+  card: { width: THUMB_SIZE },
+  bg: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE * 1.4,
+    backgroundColor: "#1C1C1C",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  img: { width: THUMB_SIZE, height: THUMB_SIZE * 1.4, borderRadius: 8, resizeMode: "cover" },
+  playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  playCircle: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center", justifyContent: "center",
+  },
+  viewsBadge: {
+    position: "absolute", bottom: 5, left: 5,
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2,
+  },
+  viewsText: { color: "#fff", fontSize: 9, fontWeight: "700" },
+  caption: { color: "#666", fontSize: 10, paddingHorizontal: 2, paddingTop: 3 },
+});
+
+// ── Full-screen video card for feed modal ─────────────────────
+function VideoFeedCard({
+  video,
+  isActive,
+  athlete,
+}: {
+  video: VideoItem;
+  isActive: boolean;
+  athlete: any;
+}) {
+  const player = useVideoPlayer(video.url, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+  const [liked, setLiked] = useState(false);
+  const [likes, setLikes] = useState(video.likes ?? 0);
+  const [views, setViews] = useState(video.views ?? 0);
+  const [likeLoading, setLikeLoading] = useState(false);
+
+  useEffect(() => {
+    if (!athlete?.id) return;
+    fetch(`${API_BASE_URL}/api/videos/${video.id}/like?athlete_id=${athlete.id}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.status === "success") { setLiked(d.liked); setLikes(d.likes); } })
+      .catch(() => {});
+    fetch(`${API_BASE_URL}/api/videos/${video.id}/views`)
+      .then((r) => r.json())
+      .then((d) => { if (d.status === "success") setViews(d.views); })
+      .catch(() => {});
+  }, [video.id, athlete?.id]);
+
+  useEffect(() => {
+    if (isActive) player.play();
+    else player.pause();
+  }, [isActive]);
+
+  async function handleLike() {
+    if (!athlete?.id || likeLoading) return;
+    setLikeLoading(true);
+    const was = liked;
+    setLiked(!was);
+    setLikes((p) => (was ? Math.max(0, p - 1) : p + 1));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ athlete_id: athlete.id }),
+      });
+      const d = await res.json();
+      if (res.ok) { setLiked(d.liked); setLikes(d.likes); }
+      else { setLiked(was); setLikes((p) => (was ? p + 1 : Math.max(0, p - 1))); }
+    } catch {
+      setLiked(was);
+      setLikes((p) => (was ? p + 1 : Math.max(0, p - 1)));
+    } finally {
+      setLikeLoading(false);
+    }
+  }
+
+  function fmt(n: number) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+    if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+    return String(n);
+  }
+
+  return (
+    <View style={{ width, height, backgroundColor: "#0A0A0A" }}>
+      <VideoView player={player} style={{ width, height }} contentFit="cover" nativeControls={false} />
+
+      <View style={feedSt.actionBar}>
+        <View style={feedSt.avatarWrap}>
+          {athlete?.photo_url ? (
+            <Image source={{ uri: athlete.photo_url }} style={feedSt.avatarImg} />
+          ) : (
+            <View style={feedSt.avatar}>
+              <Text style={feedSt.avatarText}>{athlete?.name?.charAt(0).toUpperCase() ?? "?"}</Text>
+            </View>
+          )}
+        </View>
+        <TouchableOpacity style={feedSt.actionBtn} onPress={handleLike} disabled={likeLoading} activeOpacity={0.8}>
+          <View style={[feedSt.iconWrap, liked && feedSt.iconWrapLiked]}>
+            <Ionicons name={liked ? "heart" : "heart-outline"} size={22} color={liked ? "#EF4444" : "#fff"} />
+          </View>
+          <Text style={feedSt.count}>{fmt(likes)}</Text>
+        </TouchableOpacity>
+        <View style={feedSt.actionBtn}>
+          <View style={feedSt.iconWrap}>
+            <Ionicons name="eye-outline" size={20} color="#fff" />
+          </View>
+          <Text style={feedSt.count}>{fmt(views)}</Text>
+        </View>
+      </View>
+
+      <View style={feedSt.info}>
+        <View style={feedSt.userRow}>
+          <Text style={feedSt.handle}>{"@" + (athlete?.name ?? "").toLowerCase().replace(/\s+/g, "_")}</Text>
+          {athlete?.status === "approved" && (
+            <View style={feedSt.verifiedBadge}>
+              <Ionicons name="checkmark" size={9} color="#fff" />
+            </View>
+          )}
+        </View>
+        {video.caption ? <Text style={feedSt.caption} numberOfLines={2}>{video.caption}</Text> : null}
+        {video.sport ? (
+          <View style={feedSt.tag}>
+            <Text style={feedSt.tagText}>
+              {video.sport.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const feedSt = StyleSheet.create({
+  actionBar: { position: "absolute", right: 12, bottom: 100, alignItems: "center", gap: 20 },
+  avatarWrap: { marginBottom: 4 },
+  avatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: "#D32F2F", borderWidth: 2, borderColor: "#fff",
+    alignItems: "center", justifyContent: "center",
+  },
+  avatarImg: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: "#fff" },
+  avatarText: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  actionBtn: { alignItems: "center", gap: 5 },
+  iconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderWidth: 0.5, borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center", justifyContent: "center",
+  },
+  iconWrapLiked: { backgroundColor: "rgba(239,68,68,0.2)", borderColor: "rgba(239,68,68,0.5)" },
+  count: { fontSize: 11, color: "#fff", fontWeight: "700" },
+  info: { position: "absolute", bottom: 0, left: 0, right: 70, padding: 16, paddingBottom: 20 },
+  userRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  handle: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  verifiedBadge: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#D32F2F", alignItems: "center", justifyContent: "center",
+  },
+  caption: { color: "#fff", fontSize: 13, lineHeight: 18, marginBottom: 8 },
+  tag: { alignSelf: "flex-start", backgroundColor: "#D32F2F", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  tagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+});
+
+// ── Video feed modal ──────────────────────────────────────────
+function VideoFeedModal({
+  visible,
+  videos,
+  startIndex,
+  onClose,
+  athlete,
+}: {
+  visible: boolean;
+  videos: VideoItem[];
+  startIndex: number;
+  onClose: () => void;
+  athlete: any;
+}) {
+  const { top } = useSafeAreaInsets();
+  const [activeIndex, setActiveIndex] = useState(startIndex);
+  const flatRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    if (visible) {
+      setActiveIndex(startIndex);
+      setTimeout(() => flatRef.current?.scrollToIndex({ index: startIndex, animated: false }), 50);
+    }
+  }, [visible, startIndex]);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0);
+  }, []);
+
+  return (
+    <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <StatusBar hidden={true} />
+        <TouchableOpacity
+          style={{
+            position: "absolute", top: top + 12, left: 16, zIndex: 10,
+            width: 36, height: 36, borderRadius: 18,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            alignItems: "center", justifyContent: "center",
+          }}
+          onPress={onClose}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ position: "absolute", top: top + 16, left: 60, right: 60, zIndex: 10, alignItems: "center" }}>
+          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>MY VIDEOS</Text>
+          <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 2 }}>
+            {activeIndex + 1} / {videos.length}
+          </Text>
+        </View>
+        <FlatList
+          ref={flatRef}
+          data={videos}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => (
+            <VideoFeedCard video={item} isActive={index === activeIndex} athlete={athlete} />
+          )}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          snapToInterval={height}
+          decelerationRate="fast"
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          getItemLayout={(_, index) => ({ length: height, offset: height * index, index })}
+          removeClippedSubviews
+          maxToRenderPerBatch={3}
+          windowSize={5}
+          initialScrollIndex={startIndex}
+        />
+      </View>
+    </Modal>
+  );
+}
+
 // ── Legend Endorsement Row ────────────────────────────────────
 function EndorsementRow({
   initial,
@@ -70,7 +385,7 @@ function EndorsementRow({
         <Text style={eStyles.role}>{role}</Text>
       </View>
       <TouchableOpacity style={eStyles.shareBtn} activeOpacity={0.7}>
-        <Text style={eStyles.shareIcon}>⬆</Text>
+        <Ionicons name="share-social-outline" size={15} color="#CCC" />
       </TouchableOpacity>
     </View>
   );
@@ -106,7 +421,6 @@ const eStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  shareIcon: { color: "#CCC", fontSize: 13 },
 });
 
 // ── Main Screen ───────────────────────────────────────────────
@@ -114,11 +428,13 @@ export default function ProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { athlete: contextAthlete, updateAthlete, logout } = useAuth();
-  const insets = useSafeAreaInsets();
-
   const [athlete, setAthleteLocal] = useState<Athlete | null>(null);
   const [stats, setStats] = useState({ followers: 0, following: 0, videos: 0 });
   const [refreshing, setRefreshing] = useState(false);
+  const [myVideos, setMyVideos] = useState<VideoItem[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedStartIndex, setFeedStartIndex] = useState(0);
 
   useEffect(() => {
     if (contextAthlete) {
@@ -155,17 +471,31 @@ export default function ProfileScreen() {
     [athlete?.id],
   );
 
+  const fetchMyVideos = useCallback(async () => {
+    if (!athlete?.id) return;
+    setLoadingVideos(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/videos/mine?athlete_id=${athlete.id}`);
+      const data = await res.json();
+      if (res.ok && data.data) setMyVideos(data.data);
+    } catch {
+    } finally {
+      setLoadingVideos(false);
+    }
+  }, [athlete?.id]);
+
   // Fetch on mount when athlete loads
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    fetchMyVideos();
+  }, [fetchStats, fetchMyVideos]);
 
   // Re-fetch every time user navigates back to this screen
-  // This handles: unfollow someone → go back → counts update instantly
   useFocusEffect(
     useCallback(() => {
       fetchStats();
-    }, [fetchStats]),
+      fetchMyVideos();
+    }, [fetchStats, fetchMyVideos]),
   );
 
   if (!athlete) {
@@ -183,8 +513,16 @@ export default function ProfileScreen() {
   const bio = athlete.bio ?? athlete.achievements ?? "";
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
+
+      <VideoFeedModal
+        visible={feedOpen}
+        videos={myVideos}
+        startIndex={feedStartIndex}
+        onClose={() => setFeedOpen(false)}
+        athlete={athlete}
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -193,18 +531,18 @@ export default function ProfileScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => fetchStats(true)}
+            onRefresh={() => { fetchStats(true); fetchMyVideos(); }}
             tintColor="#EF4444"
             colors={["#EF4444"]}
           />
         }
       >
         {/* ── Top bar ── */}
-        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.topBar}>
           <Text style={styles.handle}>{formatHandle(athlete.name)}</Text>
           <View style={styles.topActions}>
             <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-              <Text style={styles.iconBtnText}>⬆</Text>
+              <Ionicons name="share-social-outline" size={18} color="#CCC" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconBtn}
@@ -216,7 +554,7 @@ export default function ProfileScreen() {
                 })
               }
             >
-              <Text style={styles.iconBtnText}>⚙</Text>
+              <Ionicons name="settings-outline" size={18} color="#CCC" />
             </TouchableOpacity>
           </View>
         </View>
@@ -238,7 +576,7 @@ export default function ProfileScreen() {
             )}
             {/* Verified badge */}
             <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedCheck}>✓</Text>
+              <Ionicons name="checkmark" size={11} color="#fff" />
             </View>
           </View>
         </View>
@@ -271,7 +609,7 @@ export default function ProfileScreen() {
             })
           }
         >
-          <Text style={styles.editBtnIcon}>✎</Text>
+          <Ionicons name="pencil-outline" size={15} color="#CCC" />
           <Text style={styles.editBtnText}>Edit Profile</Text>
         </TouchableOpacity>
 
@@ -293,6 +631,32 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── Videos ── */}
+        <Text style={styles.sectionLabel}>MY VIDEOS</Text>
+        {loadingVideos ? (
+          <View style={styles.videosLoading}>
+            <ActivityIndicator color="#EF4444" size="small" />
+          </View>
+        ) : myVideos.length === 0 ? (
+          <View style={styles.videosEmpty}>
+            <Ionicons name="videocam-outline" size={36} color="#333" />
+            <Text style={styles.videosEmptyText}>No videos yet — go post your first one!</Text>
+          </View>
+        ) : (
+          <View style={styles.videosGrid}>
+            {myVideos.map((video, index) => (
+              <VideoThumb
+                key={video.id}
+                item={video}
+                onPress={() => {
+                  setFeedStartIndex(index);
+                  setFeedOpen(true);
+                }}
+              />
+            ))}
+          </View>
+        )}
+
         {/* ── Bio ── */}
         {bio ? (
           <>
@@ -304,7 +668,7 @@ export default function ProfileScreen() {
         {/* ── Legend Endorsements ── */}
         <View style={styles.endorseCard}>
           <View style={styles.endorseHeader}>
-            <Text style={styles.endorseTrophy}>🏆</Text>
+            <MaterialCommunityIcons name="trophy" size={18} color="#EF4444" />
             <Text style={styles.endorseTitle}>LEGEND ENDORSEMENTS</Text>
           </View>
 
@@ -325,7 +689,7 @@ export default function ProfileScreen() {
             </>
           ) : (
             <View style={styles.endorsePending}>
-              <Text style={styles.endorsePendingIcon}>⏳</Text>
+              <Ionicons name="time-outline" size={32} color="#555" />
               <Text style={styles.endorsePendingText}>
                 Endorsements unlock after your trial is approved
               </Text>
@@ -347,7 +711,7 @@ export default function ProfileScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -381,6 +745,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 18,
+    paddingTop: 8,
     paddingBottom: 10,
   },
   handle: {
@@ -400,7 +765,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconBtnText: { color: "#CCC", fontSize: 16 },
 
   // Avatar
   avatarSection: { alignItems: "center", marginBottom: 14 },
@@ -436,7 +800,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0A0A0A",
   },
-  verifiedCheck: { color: "#fff", fontSize: 11, fontWeight: "900" },
 
   // Name + Tags
   nameSection: {
@@ -489,7 +852,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 11,
   },
-  editBtnIcon: { color: "#CCC", fontSize: 14 },
   editBtnText: { color: "#CCC", fontSize: 14, fontWeight: "600" },
 
   // Stats
@@ -508,6 +870,28 @@ const styles = StyleSheet.create({
   statNumber: { color: "#F5F5F5", fontSize: 20, fontWeight: "800" },
   statLabel: { color: "#666", fontSize: 11, marginTop: 2, letterSpacing: 0.3 },
   statDivider: { width: 0.5, height: 30, backgroundColor: "#2A2A2A" },
+
+  // Videos grid
+  videosLoading: { height: 100, alignItems: "center", justifyContent: "center" },
+  videosEmpty: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: "#141414",
+    borderWidth: 0.5,
+    borderColor: "#222",
+    borderRadius: 14,
+    padding: 28,
+    alignItems: "center",
+    gap: 10,
+  },
+  videosEmptyText: { color: "#555", fontSize: 13, textAlign: "center" },
+  videosGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 20,
+    gap: 6,
+    marginBottom: 20,
+  },
 
   // Bio
   bio: {
@@ -534,7 +918,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  endorseTrophy: { fontSize: 18 },
   endorseTitle: {
     fontSize: 12,
     fontWeight: "800",
@@ -542,7 +925,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   endorsePending: { alignItems: "center", paddingVertical: 16, gap: 8 },
-  endorsePendingIcon: { fontSize: 28 },
   endorsePendingText: {
     fontSize: 13,
     color: "#555",

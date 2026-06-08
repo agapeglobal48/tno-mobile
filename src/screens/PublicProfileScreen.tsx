@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as VideoThumbnails from "expo-video-thumbnails";
@@ -19,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -94,15 +96,18 @@ function VideoThumb({
         ) : thumb ? (
           <Image source={{ uri: thumb }} style={styles.thumbImg} />
         ) : (
-          <Text style={styles.thumbFallback}>🎬</Text>
+          <Ionicons name="videocam-outline" size={28} color="#333" />
         )}
         <View style={styles.thumbPlayOverlay}>
           <View style={styles.thumbPlayCircle}>
-            <Text style={styles.thumbPlayIcon}>▶</Text>
+            <Ionicons name="play" size={12} color="#fff" />
           </View>
         </View>
         <View style={styles.thumbViewsBadge}>
-          <Text style={styles.thumbViews}>👁 {fmt(item.views ?? 0)}</Text>
+          <View style={styles.thumbViewsRow}>
+            <Ionicons name="eye-outline" size={9} color="#fff" />
+            <Text style={styles.thumbViews}>{fmt(item.views ?? 0)}</Text>
+          </View>
         </View>
       </View>
       {item.caption ? (
@@ -209,19 +214,20 @@ function CommentsSheet({
       transparent
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={cStyles.backdrop}
-        activeOpacity={1}
-        onPress={onClose}
-      />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={cStyles.sheet}
+        style={cStyles.kav}
       >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={cStyles.sheet}>
         <View style={cStyles.header}>
           <Text style={cStyles.headerTitle}>{total} Comments</Text>
           <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-            <Text style={cStyles.closeBtn}>✕</Text>
+            <Ionicons name="close" size={18} color="#666" />
           </TouchableOpacity>
         </View>
         {loading ? (
@@ -255,7 +261,7 @@ function CommentsSheet({
                     onPress={() => deleteComment(c.id)}
                     style={cStyles.deleteBtn}
                   >
-                    <Text style={cStyles.deleteIcon}>🗑</Text>
+                    <Ionicons name="trash-outline" size={14} color="#666" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -290,9 +296,10 @@ function CommentsSheet({
             {posting ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={cStyles.sendIcon}>➤</Text>
+              <Ionicons name="send" size={14} color="#fff" />
             )}
           </TouchableOpacity>
+        </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -300,7 +307,7 @@ function CommentsSheet({
 }
 
 const cStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  kav: { flex: 1, justifyContent: "flex-end" },
   sheet: {
     backgroundColor: "#141414",
     borderTopLeftRadius: 20,
@@ -318,7 +325,6 @@ const cStyles = StyleSheet.create({
     borderBottomColor: "#2A2A2A",
   },
   headerTitle: { color: "#F5F5F5", fontSize: 15, fontWeight: "700" },
-  closeBtn: { color: "#666", fontSize: 18 },
   center: { height: 120, alignItems: "center", justifyContent: "center" },
   emptyText: { color: "#555", fontSize: 13 },
   list: { maxHeight: height * 0.45 },
@@ -347,7 +353,6 @@ const cStyles = StyleSheet.create({
   time: { color: "#555", fontSize: 11 },
   commentText: { color: "#CCC", fontSize: 13, lineHeight: 18 },
   deleteBtn: { padding: 6 },
-  deleteIcon: { fontSize: 14 },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -386,7 +391,6 @@ const cStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sendIcon: { color: "#fff", fontSize: 14 },
 });
 
 // ── Full-screen video card ────────────────────────────────────
@@ -493,7 +497,7 @@ function VideoCard({
     <View style={vStyles.card}>
       <VideoView
         player={player}
-        style={vStyles.video}
+        style={{ width, height }}
         contentFit="cover"
         nativeControls={false}
       />
@@ -506,9 +510,11 @@ function VideoCard({
           activeOpacity={0.8}
         >
           <View style={[vStyles.iconWrap, liked && vStyles.iconWrapLiked]}>
-            <Text style={[vStyles.iconText, liked && vStyles.iconLiked]}>
-              {liked ? "♥" : "♡"}
-            </Text>
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={22}
+              color={liked ? "#EF4444" : "#fff"}
+            />
           </View>
           <Text style={vStyles.count}>{fmt(likes)}</Text>
         </TouchableOpacity>
@@ -582,8 +588,6 @@ const vStyles = StyleSheet.create({
     backgroundColor: "rgba(239,68,68,0.2)",
     borderColor: "rgba(239,68,68,0.5)",
   },
-  iconText: { fontSize: 22, color: "#fff" },
-  iconLiked: { color: "#EF4444" },
   iconImg: { width: 22, height: 22, tintColor: "#fff" },
   count: { fontSize: 11, color: "#fff", fontWeight: "700" },
   info: {
@@ -888,7 +892,7 @@ export default function PublicProfileScreen() {
   const isOwnProfile = viewer?.id === athleteId;
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
 
       <ScrollView
@@ -932,7 +936,7 @@ export default function PublicProfileScreen() {
             )}
             {profile.status === "approved" && (
               <View style={styles.verifiedBadge}>
-                <Text style={styles.verifiedCheck}>✓</Text>
+                <Ionicons name="checkmark" size={11} color="#fff" />
               </View>
             )}
           </View>
@@ -965,10 +969,16 @@ export default function PublicProfileScreen() {
           >
             {followLoading ? (
               <ActivityIndicator color="#fff" size="small" />
+            ) : isFollowing ? (
+              <View style={styles.followBtnInner}>
+                <Ionicons name="checkmark-circle" size={16} color="#EF4444" />
+                <Text style={[styles.followBtnText, { color: "#EF4444" }]}>Following</Text>
+              </View>
             ) : (
-              <Text style={styles.followBtnText}>
-                {isFollowing ? "✓  Following" : "+  Follow"}
-              </Text>
+              <View style={styles.followBtnInner}>
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={styles.followBtnText}>Follow</Text>
+              </View>
             )}
           </TouchableOpacity>
         )}
@@ -1037,7 +1047,7 @@ export default function PublicProfileScreen() {
         onClose={() => setFeedOpen(false)}
         viewer={viewer}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1114,8 +1124,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0A0A0A",
   },
-  verifiedCheck: { color: "#fff", fontSize: 11, fontWeight: "900" },
-
   nameSection: {
     alignItems: "center",
     marginBottom: 16,
@@ -1159,7 +1167,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 13,
     alignItems: "center",
+    justifyContent: "center",
   },
+  followBtnInner: { flexDirection: "row", alignItems: "center", gap: 6 },
   followBtnActive: {
     backgroundColor: "transparent",
     borderWidth: 1,
@@ -1229,7 +1239,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     resizeMode: "cover",
   },
-  thumbFallback: { fontSize: 24, color: "rgba(255,255,255,0.3)" },
   thumbPlayOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
@@ -1243,7 +1252,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  thumbPlayIcon: { color: "#fff", fontSize: 12, marginLeft: 2 },
   thumbViewsBadge: {
     position: "absolute",
     bottom: 5,
@@ -1253,6 +1261,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
   },
+  thumbViewsRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   thumbViews: { color: "#fff", fontSize: 9, fontWeight: "700" },
   thumbCaption: {
     color: "#666",

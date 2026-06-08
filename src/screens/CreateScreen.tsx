@@ -1,3 +1,4 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   CameraView,
   useCameraPermissions,
@@ -22,6 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -147,7 +149,7 @@ function PersonalVideoCard({
     <View style={feedStyles.card}>
       <VideoView
         player={player}
-        style={feedStyles.video}
+        style={{ width, height }}
         contentFit="cover"
         nativeControls={false}
       />
@@ -186,14 +188,11 @@ function PersonalVideoCard({
               liked && feedStyles.actionIconWrapLiked,
             ]}
           >
-            <Text
-              style={[
-                feedStyles.actionIconText,
-                liked && feedStyles.actionIconLiked,
-              ]}
-            >
-              {liked ? "♥" : "♡"}
-            </Text>
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={22}
+              color={liked ? "#EF4444" : "#fff"}
+            />
           </View>
           <Text style={feedStyles.actionCount}>{fmt(likes)}</Text>
         </TouchableOpacity>
@@ -219,7 +218,7 @@ function PersonalVideoCard({
           </Text>
           {athlete?.status === "approved" && (
             <View style={feedStyles.verifiedBadge}>
-              <Text style={feedStyles.verifiedCheck}>✓</Text>
+              <Ionicons name="checkmark" size={9} color="#fff" />
             </View>
           )}
         </View>
@@ -303,8 +302,6 @@ const feedStyles = StyleSheet.create({
     backgroundColor: "rgba(239,68,68,0.2)",
     borderColor: "rgba(239,68,68,0.5)",
   },
-  actionIconText: { fontSize: 22, color: "#fff" },
-  actionIconLiked: { color: "#EF4444" },
   actionIconImg: { width: 22, height: 22, tintColor: "#fff" },
   actionCount: { fontSize: 11, color: "#fff", fontWeight: "700" },
 
@@ -332,7 +329,6 @@ const feedStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  verifiedCheck: { color: "#fff", fontSize: 9, fontWeight: "900" },
   caption: { color: "#fff", fontSize: 13, lineHeight: 18, marginBottom: 8 },
   tagsRow: { flexDirection: "row", gap: 6 },
   tagRed: {
@@ -358,6 +354,7 @@ function PersonalFeedModal({
   onClose: () => void;
   athlete: any;
 }) {
+  const { top: topInset } = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(startIndex);
   const flatRef = useRef<FlatList>(null);
 
@@ -388,7 +385,7 @@ function PersonalFeedModal({
         <TouchableOpacity
           style={{
             position: "absolute",
-            top: 20,
+            top: topInset + 12,
             left: 16,
             zIndex: 10,
             width: 36,
@@ -408,7 +405,7 @@ function PersonalFeedModal({
         <View
           style={{
             position: "absolute",
-            top: 24,
+            top: topInset + 16,
             left: 60,
             right: 60,
             zIndex: 10,
@@ -488,7 +485,7 @@ export default function CreateScreen() {
 
   // Preview player — must be declared at top level (hooks rules)
   // videoUri updates dynamically as user picks/records
-  const previewPlayer = useVideoPlayer(videoUri ?? "", (p) => {
+  const previewPlayer = useVideoPlayer(videoUri ?? null, (p) => {
     p.loop = false;
     p.muted = true;
   });
@@ -605,7 +602,8 @@ export default function CreateScreen() {
   async function toggleRecording() {
     if (!cameraRef.current) return;
     if (isRecording) {
-      cameraRef.current.stopRecording();
+      // stopRecording() resolves the recordAsync() promise below
+      await cameraRef.current.stopRecording();
       setIsRecording(false);
     } else {
       setIsRecording(true);
@@ -682,13 +680,13 @@ export default function CreateScreen() {
         setMode("preview");
         if (data.code === "CONTENT_REJECTED") {
           Alert.alert(
-            "⚠️ Inappropriate Content",
+            "Inappropriate Content",
             "Your video was rejected. Only sports content is allowed.",
             [{ text: "Understood" }],
           );
         } else if (data.code === "NOT_SPORTS_CONTENT") {
           Alert.alert(
-            "🏅 Sports Content Only",
+            "Sports Content Only",
             data.message || "Please upload sports content only.",
             [{ text: "OK" }],
           );
@@ -699,7 +697,7 @@ export default function CreateScreen() {
     } catch {
       clearInterval(stepInterval);
       setMode("preview");
-      Alert.alert("Connection Error", "Make sure backend is running.");
+      Alert.alert("Connection Error", "Unable to connect. Please check your internet and try again.");
     }
   }
 
@@ -744,7 +742,7 @@ export default function CreateScreen() {
                 setIsRecording(false);
               }}
             >
-              <Text style={styles.cameraCloseText}>✕</Text>
+              <Ionicons name="close" size={20} color="#fff" />
             </TouchableOpacity>
             <View style={styles.cameraTimer}>
               {isRecording && <View style={styles.recDot} />}
@@ -829,16 +827,22 @@ export default function CreateScreen() {
           </View>
 
           <View style={styles.infoCard}>
-            <Text style={styles.infoCardRow}>
-              🏅 Sport:{" "}
-              <Text style={styles.infoVal}>
-                {athlete?.sport?.replace(/_/g, " ") || "—"}
+            <View style={styles.infoCardRow}>
+              <MaterialCommunityIcons name="trophy-outline" size={14} color="#666" />
+              <Text style={styles.infoCardText}>
+                Sport:{" "}
+                <Text style={styles.infoVal}>
+                  {athlete?.sport?.replace(/_/g, " ") || "—"}
+                </Text>
               </Text>
-            </Text>
-            <Text style={styles.infoCardRow}>
-              📍 City:{" "}
-              <Text style={styles.infoVal}>{athlete?.city || "—"}</Text>
-            </Text>
+            </View>
+            <View style={styles.infoCardRow}>
+              <Ionicons name="location-outline" size={14} color="#666" />
+              <Text style={styles.infoCardText}>
+                City:{" "}
+                <Text style={styles.infoVal}>{athlete?.city || "—"}</Text>
+              </Text>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -856,13 +860,16 @@ export default function CreateScreen() {
 
   // ── MENU screen ───────────────────────────────────────────────
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
 
       {/* Success toast */}
       {successToast && (
         <View style={styles.toast}>
-          <Text style={styles.toastText}>✓ Video posted successfully!</Text>
+          <View style={styles.toastRow}>
+            <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+            <Text style={styles.toastText}>Video posted successfully!</Text>
+          </View>
         </View>
       )}
 
@@ -932,7 +939,7 @@ export default function CreateScreen() {
           </View>
         ) : myVideos.length === 0 ? (
           <View style={styles.galleryEmpty}>
-            <Text style={styles.galleryEmptyIcon}>🎬</Text>
+            <Ionicons name="videocam-outline" size={40} color="#333" />
             <Text style={styles.galleryEmptyText}>
               No videos yet — post your first one!
             </Text>
@@ -957,13 +964,13 @@ export default function CreateScreen() {
                     />
                   ) : (
                     <View style={styles.thumbPlaceholder}>
-                      <Text style={styles.thumbPlaceholderIcon}>🎬</Text>
+                      <Ionicons name="videocam-outline" size={28} color="#333" />
                     </View>
                   )}
                   {/* Play overlay */}
                   <View style={styles.thumbOverlay}>
                     <View style={styles.thumbPlayBtn}>
-                      <Text style={styles.thumbPlayIcon}>▶</Text>
+                      <Ionicons name="play" size={14} color="#fff" />
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -1011,7 +1018,7 @@ export default function CreateScreen() {
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.deleteBtnText}>🗑</Text>
+                  <Ionicons name="trash-outline" size={14} color="#fff" />
                 </TouchableOpacity>
 
                 {/* Caption */}
@@ -1029,7 +1036,10 @@ export default function CreateScreen() {
 
         {/* Pro tips */}
         <View style={styles.tipsCard}>
-          <Text style={styles.tipsTitle}>✨ PRO TIPS</Text>
+          <View style={styles.tipsTitleRow}>
+            <Ionicons name="bulb-outline" size={16} color="#EF4444" />
+            <Text style={styles.tipsTitle}>PRO TIPS</Text>
+          </View>
           {PRO_TIPS.map((tip, i) => (
             <View key={i} style={styles.tipRow}>
               <View style={styles.tipDot} />
@@ -1040,7 +1050,7 @@ export default function CreateScreen() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1055,7 +1065,7 @@ const styles = StyleSheet.create({
     color: "#EF4444",
     letterSpacing: 2,
     marginHorizontal: 20,
-    marginTop: 20,
+    marginTop: 16,
     marginBottom: 20,
   },
   hero: { alignItems: "center", marginBottom: 28, paddingHorizontal: 20 },
@@ -1132,7 +1142,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  galleryEmptyIcon: { fontSize: 36 },
   galleryEmptyText: { color: "#555", fontSize: 13, textAlign: "center" },
   galleryGrid: {
     flexDirection: "row",
@@ -1159,7 +1168,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
-  deleteBtnText: { fontSize: 14 },
   thumbImg: {
     width: THUMB_SIZE,
     height: THUMB_SIZE * 1.4,
@@ -1172,7 +1180,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  thumbPlaceholderIcon: { fontSize: 28 },
   thumbOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
@@ -1186,7 +1193,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  thumbPlayIcon: { color: "#fff", fontSize: 14, marginLeft: 2 },
   thumbCaptionBar: {
     backgroundColor: "#0A0A0A",
     paddingHorizontal: 6,
@@ -1208,6 +1214,7 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: "center",
   },
+  toastRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   toastText: { color: "#22c55e", fontSize: 14, fontWeight: "700" },
 
   // Tips
@@ -1219,12 +1226,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
   },
+  tipsTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
   tipsTitle: {
     color: "#CCC",
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 1.5,
-    marginBottom: 14,
   },
   tipRow: {
     flexDirection: "row",
@@ -1258,7 +1270,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cameraCloseText: { color: "#fff", fontSize: 16 },
   cameraTimer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1365,7 +1376,8 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 8,
   },
-  infoCardRow: { color: "#666", fontSize: 13 },
+  infoCardRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  infoCardText: { color: "#666", fontSize: 13 },
   infoVal: { color: "#CCC", fontWeight: "600" },
   postBtn: {
     marginHorizontal: 20,

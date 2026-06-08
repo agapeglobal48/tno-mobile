@@ -1,3 +1,4 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as VideoThumbnails from "expo-video-thumbnails";
@@ -18,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../../src/config/api";
 import { useAuth } from "../../src/context/AuthContext";
 
@@ -49,19 +51,19 @@ interface VideoResult {
   athletes: { id: string; name: string; photo_url?: string; status: string };
 }
 
-const SPORTS_GRID = [
-  { name: "Cricket", emoji: "🏏", sport: "cricket" },
-  { name: "Football", emoji: "⚽", sport: "football" },
-  { name: "Boxing", emoji: "🥊", sport: "boxing" },
-  { name: "Athletics", emoji: "🏃", sport: "athletics" },
-  { name: "Hockey", emoji: "🏒", sport: "hockey" },
-  { name: "Swimming", emoji: "🏊", sport: "swimming" },
-  { name: "Badminton", emoji: "🏸", sport: "badminton" },
-  { name: "Volleyball", emoji: "🏐", sport: "volleyball" },
-  { name: "Wrestling", emoji: "🤼", sport: "wrestling" },
-  { name: "Weightlifting", emoji: "🏋️", sport: "weightlifting" },
-  { name: "Tennis", emoji: "🎾", sport: "tennis" },
-  { name: "Squash", emoji: "🎱", sport: "squash" },
+const SPORTS_LIST = [
+  { name: "Cricket", icon: "cricket", sport: "cricket" },
+  { name: "Football", icon: "soccer", sport: "football" },
+  { name: "Boxing", icon: "boxing-glove", sport: "boxing" },
+  { name: "Athletics", icon: "run", sport: "athletics" },
+  { name: "Hockey", icon: "hockey-sticks", sport: "hockey" },
+  { name: "Swimming", icon: "swim", sport: "swimming" },
+  { name: "Badminton", icon: "badminton", sport: "badminton" },
+  { name: "Volleyball", icon: "volleyball", sport: "volleyball" },
+  { name: "Wrestling", icon: "arm-flex", sport: "wrestling" },
+  { name: "Weightlifting", icon: "weight-lifter", sport: "weightlifting" },
+  { name: "Tennis", icon: "tennis", sport: "tennis" },
+  { name: "Squash", icon: "table-tennis", sport: "squash" },
 ];
 
 // ── Athlete card ──────────────────────────────────────────────
@@ -115,7 +117,7 @@ function AthleteCard({ item }: { item: AthleteResult }) {
       {/* Verified */}
       {item.status === "approved" && (
         <View style={styles.verifiedBadge}>
-          <Text style={styles.verifiedCheck}>✓</Text>
+          <Ionicons name="checkmark" size={9} color="#fff" />
         </View>
       )}
     </TouchableOpacity>
@@ -161,17 +163,18 @@ function VideoThumbCard({ item }: { item: VideoResult }) {
         ) : thumbnail ? (
           <Image source={{ uri: thumbnail }} style={styles.thumbImg} />
         ) : (
-          <Text style={styles.thumbPlay}>🎬</Text>
+          <Ionicons name="videocam-outline" size={24} color="rgba(255,255,255,0.3)" />
         )}
         {/* Play overlay */}
         <View style={styles.thumbPlayOverlay}>
           <View style={styles.thumbPlayCircle}>
-            <Text style={styles.thumbPlayIcon}>▶</Text>
+            <Ionicons name="play" size={12} color="#fff" />
           </View>
         </View>
         {/* View count badge */}
         <View style={styles.thumbViewsBadge}>
-          <Text style={styles.thumbViews}>👁 {fmt(item.views ?? 0)}</Text>
+          <Ionicons name="eye-outline" size={9} color="#fff" style={{ marginRight: 3 }} />
+          <Text style={styles.thumbViews}>{fmt(item.views ?? 0)}</Text>
         </View>
       </View>
       {/* Caption below */}
@@ -283,88 +286,93 @@ function CommentsSheet({
       transparent
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={cmtSt.backdrop}
-        activeOpacity={1}
-        onPress={onClose}
-      />
       <KeyboardAvoidingView
+        style={cmtSt.kav}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={cmtSt.sheet}
+        keyboardVerticalOffset={0}
       >
-        <View style={cmtSt.header}>
-          <Text style={cmtSt.headerTitle}>{total} Comments</Text>
-          <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-            <Text style={cmtSt.closeBtn}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        {loading ? (
-          <View style={cmtSt.center}>
-            <ActivityIndicator color="#EF4444" />
+        {/* Dimmed backdrop — absolute so it doesn't push the sheet */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+
+        <View style={cmtSt.sheet}>
+          <View style={cmtSt.header}>
+            <Text style={cmtSt.headerTitle}>{total} Comments</Text>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+              <Ionicons name="close" size={18} color="#666" />
+            </TouchableOpacity>
           </View>
-        ) : comments.length === 0 ? (
-          <View style={cmtSt.center}>
-            <Text style={cmtSt.emptyText}>No comments yet — be the first!</Text>
-          </View>
-        ) : (
-          <ScrollView style={cmtSt.list} showsVerticalScrollIndicator={false}>
-            {comments.map((c) => (
-              <View key={c.id} style={cmtSt.row}>
-                <View style={cmtSt.avatar}>
-                  <Text style={cmtSt.avatarText}>
-                    {c.name?.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={cmtSt.body}>
-                  <View style={cmtSt.top}>
-                    <Text style={cmtSt.name}>{c.name}</Text>
-                    <Text style={cmtSt.time}>{timeAgo(c.created_at)}</Text>
+          {loading ? (
+            <View style={cmtSt.center}>
+              <ActivityIndicator color="#EF4444" />
+            </View>
+          ) : comments.length === 0 ? (
+            <View style={cmtSt.center}>
+              <Text style={cmtSt.emptyText}>No comments yet — be the first!</Text>
+            </View>
+          ) : (
+            <ScrollView style={cmtSt.list} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {comments.map((c) => (
+                <View key={c.id} style={cmtSt.row}>
+                  <View style={cmtSt.avatar}>
+                    <Text style={cmtSt.avatarText}>
+                      {c.name?.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
-                  <Text style={cmtSt.commentText}>{c.text}</Text>
+                  <View style={cmtSt.body}>
+                    <View style={cmtSt.top}>
+                      <Text style={cmtSt.name}>{c.name}</Text>
+                      <Text style={cmtSt.time}>{timeAgo(c.created_at)}</Text>
+                    </View>
+                    <Text style={cmtSt.commentText}>{c.text}</Text>
+                  </View>
+                  {c.athlete_id === athlete?.id && (
+                    <TouchableOpacity
+                      onPress={() => deleteComment(c.id)}
+                      style={cmtSt.deleteBtn}
+                    >
+                      <Ionicons name="trash-outline" size={14} color="#666" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-                {c.athlete_id === athlete?.id && (
-                  <TouchableOpacity
-                    onPress={() => deleteComment(c.id)}
-                    style={cmtSt.deleteBtn}
-                  >
-                    <Text style={cmtSt.deleteIcon}>🗑</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-            <View style={{ height: 20 }} />
-          </ScrollView>
-        )}
-        <View style={cmtSt.inputRow}>
-          <View style={cmtSt.inputAvatar}>
-            <Text style={cmtSt.inputAvatarText}>
-              {athlete?.name?.charAt(0).toUpperCase() ?? "?"}
-            </Text>
+              ))}
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          )}
+          <View style={cmtSt.inputRow}>
+            <View style={cmtSt.inputAvatar}>
+              <Text style={cmtSt.inputAvatarText}>
+                {athlete?.name?.charAt(0).toUpperCase() ?? "?"}
+              </Text>
+            </View>
+            <TextInput
+              style={cmtSt.input}
+              placeholder="Add a comment..."
+              placeholderTextColor="#444"
+              value={text}
+              onChangeText={setText}
+              maxLength={300}
+              multiline
+            />
+            <TouchableOpacity
+              style={[
+                cmtSt.sendBtn,
+                (!text.trim() || posting) && { opacity: 0.4 },
+              ]}
+              onPress={postComment}
+              disabled={!text.trim() || posting}
+              activeOpacity={0.8}
+            >
+              {posting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name="send" size={14} color="#fff" />
+              )}
+            </TouchableOpacity>
           </View>
-          <TextInput
-            style={cmtSt.input}
-            placeholder="Add a comment..."
-            placeholderTextColor="#444"
-            value={text}
-            onChangeText={setText}
-            maxLength={300}
-            multiline
-          />
-          <TouchableOpacity
-            style={[
-              cmtSt.sendBtn,
-              (!text.trim() || posting) && { opacity: 0.4 },
-            ]}
-            onPress={postComment}
-            disabled={!text.trim() || posting}
-            activeOpacity={0.8}
-          >
-            {posting ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={cmtSt.sendIcon}>➤</Text>
-            )}
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -372,7 +380,11 @@ function CommentsSheet({
 }
 
 const cmtSt = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  kav: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
   sheet: {
     backgroundColor: "#141414",
     borderTopLeftRadius: 20,
@@ -390,7 +402,6 @@ const cmtSt = StyleSheet.create({
     borderBottomColor: "#2A2A2A",
   },
   headerTitle: { color: "#F5F5F5", fontSize: 15, fontWeight: "700" },
-  closeBtn: { color: "#666", fontSize: 18 },
   center: { height: 120, alignItems: "center", justifyContent: "center" },
   emptyText: { color: "#555", fontSize: 13 },
   list: { maxHeight: height * 0.45 },
@@ -419,7 +430,6 @@ const cmtSt = StyleSheet.create({
   time: { color: "#555", fontSize: 11 },
   commentText: { color: "#CCC", fontSize: 13, lineHeight: 18 },
   deleteBtn: { padding: 6 },
-  deleteIcon: { fontSize: 14 },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -458,7 +468,6 @@ const cmtSt = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sendIcon: { color: "#fff", fontSize: 14 },
 });
 
 // ── Single full-screen video card for discover feed ───────────
@@ -573,7 +582,7 @@ function DiscoverVideoCard({
     <View style={feedStyles.card}>
       <VideoView
         player={player}
-        style={feedStyles.video}
+        style={{ width, height }}
         contentFit="cover"
         nativeControls={false}
       />
@@ -612,14 +621,11 @@ function DiscoverVideoCard({
               liked && feedStyles.actionIconWrapLiked,
             ]}
           >
-            <Text
-              style={[
-                feedStyles.actionIconText,
-                liked && feedStyles.actionIconLiked,
-              ]}
-            >
-              {liked ? "♥" : "♡"}
-            </Text>
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={22}
+              color={liked ? "#EF4444" : "#fff"}
+            />
           </View>
           <Text style={feedStyles.actionCount}>{fmt(likes)}</Text>
         </TouchableOpacity>
@@ -659,7 +665,7 @@ function DiscoverVideoCard({
           </Text>
           {video.athletes?.status === "approved" && (
             <View style={feedStyles.verifiedBadge}>
-              <Text style={feedStyles.verifiedCheck}>✓</Text>
+              <Ionicons name="checkmark" size={9} color="#fff" />
             </View>
           )}
         </View>
@@ -732,8 +738,6 @@ const feedStyles = StyleSheet.create({
     backgroundColor: "rgba(239,68,68,0.2)",
     borderColor: "rgba(239,68,68,0.5)",
   },
-  actionIconText: { fontSize: 22, color: "#fff" },
-  actionIconLiked: { color: "#EF4444" },
   actionIconImg: { width: 22, height: 22, tintColor: "#fff" },
   actionCount: { fontSize: 11, color: "#fff", fontWeight: "700" },
   info: {
@@ -759,7 +763,6 @@ const feedStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  verifiedCheck: { color: "#fff", fontSize: 9, fontWeight: "900" },
   caption: { color: "#fff", fontSize: 13, lineHeight: 18, marginBottom: 8 },
   sportTag: {
     alignSelf: "flex-start",
@@ -785,6 +788,7 @@ function DiscoverFeedModal({
   onClose: () => void;
   athlete: any;
 }) {
+  const { top: topInset } = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(startIndex);
   const [commentVideoId, setCommentVideoId] = useState<string | null>(null);
   const flatRef = useRef<FlatList>(null);
@@ -816,7 +820,7 @@ function DiscoverFeedModal({
         <TouchableOpacity
           style={{
             position: "absolute",
-            top: 20,
+            top: topInset + 12,
             left: 16,
             zIndex: 10,
             width: 36,
@@ -836,7 +840,7 @@ function DiscoverFeedModal({
         <View
           style={{
             position: "absolute",
-            top: 24,
+            top: topInset + 16,
             left: 60,
             right: 60,
             zIndex: 10,
@@ -987,7 +991,7 @@ export default function DiscoverScreen() {
   const isSearching = query.trim().length > 0;
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
 
       {/* Header */}
@@ -997,7 +1001,7 @@ export default function DiscoverScreen() {
 
       {/* Search bar */}
       <View style={styles.searchRow}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Ionicons name="search" size={17} color="#555" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search athletes, sports, hashtags..."
@@ -1014,7 +1018,7 @@ export default function DiscoverScreen() {
             activeOpacity={0.7}
             style={styles.clearBtn}
           >
-            <Text style={styles.clearIcon}>✕</Text>
+            <Ionicons name="close-circle" size={18} color="#444" />
           </TouchableOpacity>
         )}
       </View>
@@ -1030,13 +1034,19 @@ export default function DiscoverScreen() {
             onPress={() => handleTabSwitch("athletes")}
             activeOpacity={0.8}
           >
+            <Ionicons
+              name="people-outline"
+              size={14}
+              color={tab === "athletes" ? "#fff" : "#666"}
+              style={{ marginRight: 5 }}
+            />
             <Text
               style={[
                 styles.toggleText,
                 tab === "athletes" && styles.toggleTextActive,
               ]}
             >
-              👤 Athletes
+              Athletes
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1047,13 +1057,19 @@ export default function DiscoverScreen() {
             onPress={() => handleTabSwitch("videos")}
             activeOpacity={0.8}
           >
+            <Ionicons
+              name="videocam-outline"
+              size={14}
+              color={tab === "videos" ? "#fff" : "#666"}
+              style={{ marginRight: 5 }}
+            />
             <Text
               style={[
                 styles.toggleText,
                 tab === "videos" && styles.toggleTextActive,
               ]}
             >
-              🎬 Videos
+              Videos
             </Text>
           </TouchableOpacity>
         </View>
@@ -1070,7 +1086,7 @@ export default function DiscoverScreen() {
         tab === "athletes" ? (
           athleteResults.length === 0 && searched ? (
             <View style={styles.centered}>
-              <Text style={styles.emptyIcon}>🔍</Text>
+              <Ionicons name="search-outline" size={48} color="#333" />
               <Text style={styles.emptyTitle}>No athletes found</Text>
               <Text style={styles.emptyText}>
                 Try a different name, sport or city
@@ -1089,7 +1105,7 @@ export default function DiscoverScreen() {
           )
         ) : videoResults.length === 0 && searched ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyIcon}>🎬</Text>
+            <Ionicons name="videocam-outline" size={48} color="#333" />
             <Text style={styles.emptyTitle}>No videos found</Text>
             <Text style={styles.emptyText}>
               Try searching with hashtags like #cricket
@@ -1121,28 +1137,36 @@ export default function DiscoverScreen() {
       ) : (
         // ── DEFAULT BROWSE ────────────────────────────────────
         <FlatList
-          data={SPORTS_GRID}
+          data={SPORTS_LIST}
           keyExtractor={(item) => item.sport}
-          numColumns={2}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.sportCard}
-              activeOpacity={0.85}
+              style={styles.sportRow}
+              activeOpacity={0.75}
               onPress={() => {
                 setQuery(item.name);
                 handleQueryChange(item.name);
                 handleTabSwitch("athletes");
               }}
             >
-              <Text style={styles.sportEmoji}>{item.emoji}</Text>
-              <Text style={styles.sportName}>{item.name.toUpperCase()}</Text>
+              <View style={styles.sportIconWrap}>
+                <MaterialCommunityIcons
+                  name={item.icon as any}
+                  size={22}
+                  color="#EF4444"
+                />
+              </View>
+              <Text style={styles.sportRowName}>{item.name}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#333" />
             </TouchableOpacity>
           )}
-          columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={styles.gridContent}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <Text style={styles.browseLabel}>🏅 BROWSE BY SPORT</Text>
+            <View style={styles.browseLabelRow}>
+              <MaterialCommunityIcons name="trophy-outline" size={14} color="#EF4444" />
+              <Text style={styles.browseLabel}>BROWSE BY SPORT</Text>
+            </View>
           }
         />
       )}
@@ -1155,7 +1179,7 @@ export default function DiscoverScreen() {
         onClose={() => setFeedOpen(false)}
         athlete={athlete}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1183,7 +1207,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 14,
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, color: "#F5F5F5", fontSize: 14, paddingVertical: 13 },
   clearBtn: { padding: 6 },
   clearIcon: { color: "#555", fontSize: 14 },
@@ -1204,6 +1228,8 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
   },
   toggleBtnActive: { backgroundColor: "#D32F2F" },
   toggleText: { color: "#666", fontSize: 13, fontWeight: "700" },
@@ -1250,7 +1276,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 8,
   },
-  verifiedCheck: { color: "#fff", fontSize: 10, fontWeight: "900" },
 
   tagRed: {
     backgroundColor: "#D32F2F",
@@ -1300,7 +1325,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  thumbPlayIcon: { color: "#fff", fontSize: 13, marginLeft: 2 },
   thumbViewsBadge: {
     position: "absolute",
     bottom: 5,
@@ -1309,6 +1333,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 5,
     paddingVertical: 2,
+    flexDirection: "row",
+    alignItems: "center",
   },
   thumbViews: { color: "#fff", fontSize: 9, fontWeight: "700" },
   thumbCaption: {
@@ -1325,35 +1351,47 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
 
-  // Sports grid
-  sportCard: {
-    flex: 1,
-    margin: 5,
-    backgroundColor: "#141414",
-    borderWidth: 0.5,
-    borderColor: "#222",
-    borderRadius: 14,
-    padding: 20,
+  // Sports list
+  sportRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#181818",
+    gap: 14,
   },
-  sportEmoji: { fontSize: 36 },
-  sportName: {
-    color: "#F5F5F5",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textAlign: "center",
+  sportIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#1A0808",
+    borderWidth: 0.5,
+    borderColor: "#3A1515",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sportRowName: {
+    flex: 1,
+    color: "#EFEFEF",
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: 0.1,
   },
 
+  browseLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
   browseLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
-    color: "#CCC",
+    color: "#555",
     letterSpacing: 1.5,
-    marginHorizontal: 5,
-    marginBottom: 12,
-    marginTop: 4,
   },
 
   // States
@@ -1364,8 +1402,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: { color: "#666", fontSize: 14 },
-  emptyIcon: { fontSize: 40 },
-  emptyTitle: { color: "#F5F5F5", fontSize: 18, fontWeight: "800" },
+  emptyTitle: { color: "#F5F5F5", fontSize: 18, fontWeight: "800", marginTop: 8 },
   emptyText: { color: "#666", fontSize: 13, textAlign: "center" },
 
   listContent: { paddingBottom: 20 },

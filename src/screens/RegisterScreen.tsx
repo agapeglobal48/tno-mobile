@@ -1,3 +1,4 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -15,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Field from "../components/Field";
 import { API_BASE_URL } from "../config/api";
 
@@ -270,7 +272,7 @@ export default function RegisterScreen() {
     } catch {
       Alert.alert(
         "Connection Error",
-        "Cannot reach server.\n\n1. Backend is running (node server.js)\n2. Phone and PC on same WiFi\n3. IP in src/config/api.ts matches your PC",
+        "Unable to connect. Please check your internet connection and try again.",
       );
     } finally {
       setLoading(false);
@@ -284,12 +286,12 @@ export default function RegisterScreen() {
   // ── SUCCESS ────────────────────────────────────────────────
   if (success) {
     return (
-      <View style={styles.root}>
+      <SafeAreaView style={styles.root} edges={["top"]}>
         <StatusBar hidden={true} />
         <View style={styles.successContainer}>
           <View style={styles.successCard}>
             <View style={styles.successIcon}>
-              <Text style={styles.successCheck}>✓</Text>
+              <Ionicons name="checkmark" size={32} color="#EF4444" />
             </View>
             <Text style={styles.successTitle}>You are Registered!</Text>
             <Text style={styles.successMsg}>
@@ -315,13 +317,13 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // ── FORM ───────────────────────────────────────────────────
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -363,14 +365,16 @@ export default function RegisterScreen() {
 
           {/* Feature Cards */}
           <View style={styles.featGrid}>
-            {[
-              { icon: "👥", label: "Nationwide Trials" },
-              { icon: "🏅", label: "10+ Sports Categories" },
-              { icon: "🎯", label: "Coaching by Olympians" },
-              { icon: "🛡️", label: "Scholarships" },
-            ].map((f, i) => (
+            {([
+              { iconLib: "Ionicons", name: "people-outline", label: "Nationwide Trials" },
+              { iconLib: "MaterialCommunityIcons", name: "trophy-outline", label: "10+ Sports Categories" },
+              { iconLib: "Ionicons", name: "ribbon-outline", label: "Coaching by Olympians" },
+              { iconLib: "Ionicons", name: "shield-outline", label: "Scholarships" },
+            ] as const).map((f, i) => (
               <View key={i} style={styles.featCard}>
-                <Text style={styles.featIcon}>{f.icon}</Text>
+                {f.iconLib === "Ionicons"
+                  ? <Ionicons name={f.name as any} size={28} color="#EF4444" />
+                  : <MaterialCommunityIcons name={f.name as any} size={28} color="#EF4444" />}
                 <Text style={styles.featLabel}>{f.label}</Text>
               </View>
             ))}
@@ -379,7 +383,10 @@ export default function RegisterScreen() {
           {/* General error banner */}
           {errors.general ? (
             <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>⚠ {errors.general}</Text>
+              <View style={styles.errorBannerRow}>
+                <Ionicons name="warning-outline" size={15} color="#EF4444" />
+                <Text style={styles.errorBannerText}>{errors.general}</Text>
+              </View>
             </View>
           ) : null}
 
@@ -673,7 +680,7 @@ export default function RegisterScreen() {
                 />
               ) : (
                 <>
-                  <Text style={styles.photoIcon}>📷</Text>
+                  <Ionicons name="camera-outline" size={36} color="#EF4444" />
                   <Text style={styles.photoText}>Tap to upload photo</Text>
                   <Text style={styles.photoSub}>
                     JPG or PNG · Passport size
@@ -726,7 +733,7 @@ export default function RegisterScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -741,7 +748,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 14,
     borderBottomWidth: 0.5,
     borderBottomColor: "#2A2A2A",
     backgroundColor: "#0A0A0A",
@@ -797,7 +806,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  featIcon: { fontSize: 24 },
   featLabel: {
     fontSize: 12,
     fontWeight: "600",
@@ -814,7 +822,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
   },
-  errorBannerText: { color: "#EF4444", fontSize: 13 },
+  errorBannerRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  errorBannerText: { flex: 1, color: "#EF4444", fontSize: 13 },
 
   sectionLabel: {
     fontSize: 11,
@@ -888,7 +897,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  photoIcon: { fontSize: 32 },
   photoText: { fontSize: 14, fontWeight: "600", color: "#CCC" },
   photoSub: { fontSize: 12, color: "#666" },
   photoPreview: {
@@ -945,7 +953,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  successCheck: { fontSize: 28, color: "#EF4444" },
   successTitle: {
     fontSize: 28,
     fontWeight: "900",

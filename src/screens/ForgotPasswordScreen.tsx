@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -13,15 +14,13 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config/api";
 
 type Step = "email" | "code" | "success";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -106,17 +105,14 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={["top"]}>
       <StatusBar hidden={true} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={[
-            styles.scroll,
-            { paddingTop: insets.top + 20 },
-          ]}
+          contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -150,14 +146,20 @@ export default function ForgotPasswordScreen() {
           {/* Error */}
           {error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠ {error}</Text>
+              <View style={styles.msgRow}>
+                <Ionicons name="warning-outline" size={15} color="#EF4444" />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
             </View>
           ) : null}
 
           {/* Message */}
           {message && !error ? (
             <View style={styles.messageBox}>
-              <Text style={styles.messageText}>✓ {message}</Text>
+              <View style={styles.msgRow}>
+                <Ionicons name="checkmark-circle-outline" size={15} color="#22c55e" />
+                <Text style={styles.messageText}>{message}</Text>
+              </View>
             </View>
           ) : null}
 
@@ -267,7 +269,7 @@ export default function ForgotPasswordScreen() {
           {step === "success" && (
             <>
               <View style={styles.successIcon}>
-                <Text style={styles.successEmoji}>🎉</Text>
+                <Ionicons name="checkmark-circle" size={72} color="#EF4444" />
               </View>
               <TouchableOpacity
                 style={styles.btn}
@@ -282,13 +284,13 @@ export default function ForgotPasswordScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0A0A0A" },
-  scroll: { paddingHorizontal: 24, paddingBottom: 40 },
+  scroll: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
 
   header: {
     flexDirection: "row",
@@ -320,7 +322,8 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 20,
   },
-  errorText: { color: "#EF4444", fontSize: 13 },
+  msgRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  errorText: { flex: 1, color: "#EF4444", fontSize: 13 },
   messageBox: {
     backgroundColor: "rgba(34,197,94,0.1)",
     borderWidth: 0.5,
@@ -329,7 +332,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 20,
   },
-  messageText: { color: "#22c55e", fontSize: 13 },
+  messageText: { flex: 1, color: "#22c55e", fontSize: 13 },
 
   label: {
     fontSize: 11,
@@ -382,5 +385,4 @@ const styles = StyleSheet.create({
   resendText: { color: "#666", fontSize: 13, textDecorationLine: "underline" },
 
   successIcon: { alignItems: "center", paddingVertical: 32 },
-  successEmoji: { fontSize: 64 },
 });

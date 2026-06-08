@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 
 // ── Auth gate — redirects based on login state ────────────────
@@ -69,41 +70,44 @@ class ErrorBoundary extends React.Component<
     this.state = { hasError: false };
   }
   static getDerivedStateFromError() {
-    return { hasError: false };
+    return { hasError: true };
   }
   componentDidCatch(error: any) {
     console.log("[ErrorBoundary]", error);
   }
   render() {
+    if (this.state.hasError) return this.props.children;
     return this.props.children;
   }
 }
 
 export default function RootLayout() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <View style={{ flex: 1, backgroundColor: "#0A0A0A" }}>
-          <AuthGate>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                animation: "fade",
-                contentStyle: { backgroundColor: "#0A0A0A" },
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="register" />
-              <Stack.Screen name="login" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="edit-profile" />
-              <Stack.Screen name="public-profile" />
-              <Stack.Screen name="forgot-password" />
-            </Stack>
-          </AuthGate>
-          <StatusBar hidden={true} />
-        </View>
-      </AuthProvider>
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <View style={{ flex: 1, backgroundColor: "#0A0A0A" }}>
+            <AuthGate>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  animation: "fade",
+                  contentStyle: { backgroundColor: "#0A0A0A" },
+                }}
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen name="register" />
+                <Stack.Screen name="login" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="edit-profile" />
+                <Stack.Screen name="public-profile" />
+                <Stack.Screen name="forgot-password" />
+              </Stack>
+            </AuthGate>
+            <StatusBar hidden={true} />
+          </View>
+        </AuthProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }

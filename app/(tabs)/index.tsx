@@ -1,3 +1,4 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -150,97 +151,101 @@ function CommentsModal({
       transparent
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={cmtStyles.backdrop}
-        activeOpacity={1}
-        onPress={onClose}
-      />
       <KeyboardAvoidingView
+        style={cmtStyles.kav}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={cmtStyles.sheet}
+        keyboardVerticalOffset={0}
       >
-        <View style={cmtStyles.header}>
-          <Text style={cmtStyles.headerTitle}>{total} Comments</Text>
-          <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-            <Text style={cmtStyles.closeBtn}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        {loading ? (
-          <View style={cmtStyles.loading}>
-            <ActivityIndicator color="#EF4444" />
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={cmtStyles.sheet}>
+          <View style={cmtStyles.header}>
+            <Text style={cmtStyles.headerTitle}>{total} Comments</Text>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+              <Ionicons name="close" size={18} color="#666" />
+            </TouchableOpacity>
           </View>
-        ) : comments.length === 0 ? (
-          <View style={cmtStyles.empty}>
-            <Text style={cmtStyles.emptyIcon}>💬</Text>
-            <Text style={cmtStyles.emptyText}>
-              No comments yet — be the first!
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={cmtStyles.list}
-            showsVerticalScrollIndicator={false}
-          >
-            {comments.map((c) => (
-              <View key={c.id} style={cmtStyles.commentRow}>
-                <View style={cmtStyles.avatar}>
-                  <Text style={cmtStyles.avatarText}>
-                    {c.name?.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={cmtStyles.commentBody}>
-                  <View style={cmtStyles.commentTop}>
-                    <Text style={cmtStyles.commentName}>{c.name}</Text>
-                    <Text style={cmtStyles.commentTime}>
-                      {timeAgo(c.created_at)}
+          {loading ? (
+            <View style={cmtStyles.loading}>
+              <ActivityIndicator color="#EF4444" />
+            </View>
+          ) : comments.length === 0 ? (
+            <View style={cmtStyles.empty}>
+              <Ionicons name="chatbubble-outline" size={32} color="#444" />
+              <Text style={cmtStyles.emptyText}>
+                No comments yet — be the first!
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={cmtStyles.list}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {comments.map((c) => (
+                <View key={c.id} style={cmtStyles.commentRow}>
+                  <View style={cmtStyles.avatar}>
+                    <Text style={cmtStyles.avatarText}>
+                      {c.name?.charAt(0).toUpperCase()}
                     </Text>
                   </View>
-                  <Text style={cmtStyles.commentText}>{c.text}</Text>
+                  <View style={cmtStyles.commentBody}>
+                    <View style={cmtStyles.commentTop}>
+                      <Text style={cmtStyles.commentName}>{c.name}</Text>
+                      <Text style={cmtStyles.commentTime}>
+                        {timeAgo(c.created_at)}
+                      </Text>
+                    </View>
+                    <Text style={cmtStyles.commentText}>{c.text}</Text>
+                  </View>
+                  {c.athlete_id === athlete?.id && (
+                    <TouchableOpacity
+                      onPress={() => deleteComment(c.id)}
+                      activeOpacity={0.7}
+                      style={cmtStyles.deleteBtn}
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#666" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-                {c.athlete_id === athlete?.id && (
-                  <TouchableOpacity
-                    onPress={() => deleteComment(c.id)}
-                    activeOpacity={0.7}
-                    style={cmtStyles.deleteBtn}
-                  >
-                    <Text style={cmtStyles.deleteIcon}>🗑</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-            <View style={{ height: 20 }} />
-          </ScrollView>
-        )}
-        <View style={cmtStyles.inputRow}>
-          <View style={cmtStyles.inputAvatar}>
-            <Text style={cmtStyles.inputAvatarText}>
-              {athlete?.name?.charAt(0).toUpperCase() ?? "?"}
-            </Text>
+              ))}
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          )}
+          <View style={cmtStyles.inputRow}>
+            <View style={cmtStyles.inputAvatar}>
+              <Text style={cmtStyles.inputAvatarText}>
+                {athlete?.name?.charAt(0).toUpperCase() ?? "?"}
+              </Text>
+            </View>
+            <TextInput
+              style={cmtStyles.input}
+              placeholder="Add a comment..."
+              placeholderTextColor="#444"
+              value={text}
+              onChangeText={setText}
+              maxLength={300}
+              multiline
+            />
+            <TouchableOpacity
+              style={[
+                cmtStyles.sendBtn,
+                (!text.trim() || posting) && { opacity: 0.4 },
+              ]}
+              onPress={postComment}
+              disabled={!text.trim() || posting}
+              activeOpacity={0.8}
+            >
+              {posting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name="send" size={14} color="#fff" />
+              )}
+            </TouchableOpacity>
           </View>
-          <TextInput
-            style={cmtStyles.input}
-            placeholder="Add a comment..."
-            placeholderTextColor="#444"
-            value={text}
-            onChangeText={setText}
-            maxLength={300}
-            multiline
-          />
-          <TouchableOpacity
-            style={[
-              cmtStyles.sendBtn,
-              (!text.trim() || posting) && { opacity: 0.4 },
-            ]}
-            onPress={postComment}
-            disabled={!text.trim() || posting}
-            activeOpacity={0.8}
-          >
-            {posting ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={cmtStyles.sendIcon}>➤</Text>
-            )}
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -248,7 +253,11 @@ function CommentsModal({
 }
 
 const cmtStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  kav: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
   sheet: {
     backgroundColor: "#141414",
     borderTopLeftRadius: 20,
@@ -274,7 +283,6 @@ const cmtStyles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
   },
-  emptyIcon: { fontSize: 32 },
   emptyText: { color: "#555", fontSize: 13 },
   list: { maxHeight: height * 0.5 },
   commentRow: {
@@ -360,6 +368,7 @@ function VideoCard({
   isFollowing,
   onFollowToggle,
   screenFocused,
+  cardHeight,
 }: {
   item: VideoItem;
   isActive: boolean;
@@ -368,6 +377,7 @@ function VideoCard({
   isFollowing: boolean;
   onFollowToggle: (athleteId: string) => void;
   screenFocused: boolean;
+  cardHeight: number;
 }) {
   const player = useVideoPlayer(item.url, (p) => {
     p.loop = true;
@@ -471,10 +481,10 @@ function VideoCard({
   }
 
   return (
-    <View style={styles.videoCard}>
+    <View style={[styles.videoCard, { height: cardHeight }]}>
       <VideoView
         player={player}
-        style={styles.video}
+        style={{ width, height: cardHeight }}
         contentFit="cover"
         nativeControls={false}
       />
@@ -491,9 +501,11 @@ function VideoCard({
           <View
             style={[styles.actionIconWrap, liked && styles.actionIconWrapLiked]}
           >
-            <Text style={[styles.actionIcon, liked && styles.actionIconLiked]}>
-              {liked ? "♥" : "♡"}
-            </Text>
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={22}
+              color={liked ? "#EF4444" : "#fff"}
+            />
           </View>
           <Text style={styles.actionCount}>{fmt(likes)}</Text>
         </TouchableOpacity>
@@ -545,7 +557,7 @@ function VideoCard({
           </Text>
           {item.athletes?.status === "approved" && (
             <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedCheck}>✓</Text>
+              <Ionicons name="checkmark" size={9} color="#fff" />
             </View>
           )}
           {/* Follow button — hidden on own videos */}
@@ -592,6 +604,8 @@ function VideoCard({
 export default function HomeScreen() {
   const { athlete } = useAuth();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = 52 + Math.max(insets.bottom, Platform.OS === "android" ? 8 : 4);
+  const cardHeight = height - tabBarHeight;
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -747,61 +761,30 @@ export default function HomeScreen() {
     fetch(nextVideoUrl, { method: "HEAD" }).catch(() => {});
   }, [nextVideoUrl]);
 
-  const CATEGORIES = [
-    "For You",
-    "Trending",
-    "Cricket",
-    "Football",
-    "Tennis",
-    "Table Tennis",
-    "Swimming",
-    "Athletics",
-    "Hockey",
-    "Volleyball",
-    "Badminton",
-    "Boxing",
-    "Wrestling",
-    "Weightlifting",
-    "Cycling",
-    "Squash",
-  ];
+  const CATEGORIES = ["For You", "Trending"];
 
   return (
     <View style={styles.root}>
       <StatusBar hidden={true} />
 
-      {/* Category pills — respect notch/dynamic island */}
+      {/* Category pills — centered, only For You + Trending */}
       <View style={[styles.categories, { top: insets.top + 8 }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.catScroll}
-        >
-          {CATEGORIES.map((c) => (
-            <TouchableOpacity
-              key={c}
-              style={[
-                styles.catPill,
-                activeCategory === c && styles.catPillActive,
-              ]}
-              onPress={() => {
-                setActiveCategory(c);
-                setActiveIndex(0);
-              }}
-              activeOpacity={0.8}
-            >
-              {c === "For You" && <Text style={styles.catFire}>🔥 </Text>}
-              <Text
-                style={[
-                  styles.catText,
-                  activeCategory === c && styles.catTextActive,
-                ]}
-              >
-                {c}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {CATEGORIES.map((c) => (
+          <TouchableOpacity
+            key={c}
+            style={[styles.catPill, activeCategory === c && styles.catPillActive]}
+            onPress={() => {
+              setActiveCategory(c);
+              setActiveIndex(0);
+            }}
+            activeOpacity={0.8}
+          >
+            {c === "For You" && <MaterialCommunityIcons name="fire" size={13} color={activeCategory === "For You" ? "#D32F2F" : "#EF4444"} style={{ marginRight: 4 }} />}
+            <Text style={[styles.catText, activeCategory === c && styles.catTextActive]}>
+              {c}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {loading ? (
@@ -811,7 +794,7 @@ export default function HomeScreen() {
         </View>
       ) : error ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>⚠️</Text>
+          <Ionicons name="warning-outline" size={48} color="#EF4444" />
           <Text style={styles.emptyTitle}>Connection Error</Text>
           <Text style={styles.emptyText}>{error}</Text>
           <TouchableOpacity
@@ -823,11 +806,11 @@ export default function HomeScreen() {
         </View>
       ) : videos.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🏅</Text>
+          <MaterialCommunityIcons name="trophy-outline" size={48} color="#EF4444" />
           <Text style={styles.emptyTitle}>No videos yet</Text>
           <Text style={styles.emptyText}>
             {activeCategory === "For You"
-              ? `Be the first to post a ${athlete?.sport?.replace(/_/g, " ")} video!`
+              ? `Be the first to post a ${athlete?.sport?.replace(/_/g, " ") ?? "sports"} video!`
               : `No ${activeCategory} videos yet.`}
           </Text>
         </View>
@@ -844,17 +827,18 @@ export default function HomeScreen() {
               isFollowing={!!followMap[item.athletes?.id]}
               onFollowToggle={handleFollowToggle}
               screenFocused={screenFocused}
+              cardHeight={cardHeight}
             />
           )}
           pagingEnabled
           showsVerticalScrollIndicator={false}
-          snapToInterval={height}
+          snapToInterval={cardHeight}
           decelerationRate="fast"
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
           getItemLayout={(_, index) => ({
-            length: height,
-            offset: height * index,
+            length: cardHeight,
+            offset: cardHeight * index,
             index,
           })}
           refreshing={refreshing}
@@ -879,7 +863,17 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0A0A0A" },
 
-  categories: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 },
+  categories: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+  },
   catScroll: { paddingHorizontal: 14, gap: 8 },
   catPill: {
     flexDirection: "row",
@@ -892,7 +886,6 @@ const styles = StyleSheet.create({
     borderColor: "#333",
   },
   catPillActive: { backgroundColor: "#fff" },
-  catFire: { fontSize: 12 },
   catText: { color: "#CCC", fontSize: 13, fontWeight: "600" },
   catTextActive: { color: "#0A0A0A" },
 
@@ -1016,7 +1009,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     gap: 12,
   },
-  emptyIcon: { fontSize: 48, marginBottom: 8 },
   emptyTitle: { color: "#F5F5F5", fontSize: 20, fontWeight: "800" },
   emptyText: {
     color: "#666",
