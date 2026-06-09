@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -360,7 +360,7 @@ const cmtStyles = StyleSheet.create({
 });
 
 // ── Video Card ─────────────────────────────────────────────────
-function VideoCard({
+const VideoCard = memo(function VideoCard({
   item,
   isActive,
   athlete,
@@ -598,14 +598,13 @@ function VideoCard({
       </View>
     </View>
   );
-}
+});
 
 // ── Home Screen ───────────────────────────────────────────────
 export default function HomeScreen() {
   const { athlete } = useAuth();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = 52 + Math.max(insets.bottom, Platform.OS === "android" ? 8 : 4);
-  const cardHeight = height - tabBarHeight;
+  const cardHeight = height;
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -629,6 +628,8 @@ export default function HomeScreen() {
 
   // ── Shared follow state map: athleteId → boolean ─────────────
   const [followMap, setFollowMap] = useState<Record<string, boolean>>({});
+  const followMapRef = useRef(followMap);
+  useEffect(() => { followMapRef.current = followMap; }, [followMap]);
 
   // Fetch initial follow status for all unique athletes in feed
   async function fetchFollowStatuses(videoList: VideoItem[]) {
@@ -641,32 +642,29 @@ export default function HomeScreen() {
       ),
     ];
 
-    await Promise.all(
+    const results = await Promise.allSettled(
       uniqueAthleteIds.map(async (athleteId) => {
-        try {
-          const res = await fetch(
-            `${API_BASE_URL}/api/athletes/${athleteId}/stats?athlete_id=${athlete.id}`,
-          );
-          const data = await res.json();
-          if (res.ok) {
-            setFollowMap((prev) => ({
-              ...prev,
-              [athleteId]: data.isFollowing,
-            }));
-          }
-        } catch {}
+        const res = await fetch(
+          `${API_BASE_URL}/api/athletes/${athleteId}/stats?athlete_id=${athlete.id}`,
+        );
+        const data = await res.json();
+        return { athleteId, isFollowing: res.ok ? data.isFollowing : false };
       }),
     );
+    const batch: Record<string, boolean> = {};
+    results.forEach((r) => {
+      if (r.status === "fulfilled") batch[r.value.athleteId] = r.value.isFollowing;
+    });
+    if (Object.keys(batch).length > 0) {
+      setFollowMap((prev) => ({ ...prev, ...batch }));
+    }
   }
 
-  // Toggle follow — updates all cards for that athlete at once
-  async function handleFollowToggle(targetAthleteId: string) {
+  // Toggle follow — stable callback, reads followMap via ref to avoid stale closure
+  const handleFollowToggle = useCallback(async (targetAthleteId: string) => {
     if (!athlete?.id || !targetAthleteId) return;
-
-    // Optimistic update across ALL cards
-    const wasFollowing = !!followMap[targetAthleteId];
+    const wasFollowing = !!followMapRef.current[targetAthleteId];
     setFollowMap((prev) => ({ ...prev, [targetAthleteId]: !wasFollowing }));
-
     try {
       const res = await fetch(
         `${API_BASE_URL}/api/athletes/${targetAthleteId}/follow`,
@@ -678,19 +676,14 @@ export default function HomeScreen() {
       );
       const data = await res.json();
       if (res.ok) {
-        // Confirm with server response
-        setFollowMap((prev) => ({
-          ...prev,
-          [targetAthleteId]: data.following,
-        }));
+        setFollowMap((prev) => ({ ...prev, [targetAthleteId]: data.following }));
       } else {
-        // Revert on failure
         setFollowMap((prev) => ({ ...prev, [targetAthleteId]: wasFollowing }));
       }
     } catch {
       setFollowMap((prev) => ({ ...prev, [targetAthleteId]: wasFollowing }));
     }
-  }
+  }, [athlete?.id]);
 
   const fetchControllerRef = useRef<AbortController | null>(null);
 
@@ -761,6 +754,8 @@ export default function HomeScreen() {
     fetch(nextVideoUrl, { method: "HEAD" }).catch(() => {});
   }, [nextVideoUrl]);
 
+  const handleCommentPress = useCallback((id: string) => setCommentVideoId(id), []);
+
   const CATEGORIES = ["For You", "Trending"];
 
   return (
@@ -823,7 +818,7 @@ export default function HomeScreen() {
               item={item}
               isActive={index === activeIndex}
               athlete={athlete}
-              onCommentPress={(id) => setCommentVideoId(id)}
+              onCommentPress={handleCommentPress}
               isFollowing={!!followMap[item.athletes?.id]}
               onFollowToggle={handleFollowToggle}
               screenFocused={screenFocused}
@@ -832,20 +827,19 @@ export default function HomeScreen() {
           )}
           pagingEnabled
           showsVerticalScrollIndicator={false}
-          snapToInterval={cardHeight}
           decelerationRate="fast"
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
           getItemLayout={(_, index) => ({
-            length: cardHeight,
-            offset: cardHeight * index,
+            length: height,
+            offset: height * index,
             index,
           })}
           refreshing={refreshing}
           onRefresh={() => fetchVideos(activeCategory, true)}
-          removeClippedSubviews
-          maxToRenderPerBatch={3}
-          windowSize={5}
+          maxToRenderPerBatch={2}
+          initialNumToRender={1}
+          windowSize={3}
         />
       )}
 
@@ -895,7 +889,7 @@ const styles = StyleSheet.create({
   actionBar: {
     position: "absolute",
     right: 14,
-    bottom: 130,
+    bottom: 150,
     alignItems: "center",
     gap: 18,
   },
@@ -930,7 +924,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 70,
     padding: 16,
-    paddingBottom: 24,
+    paddingBottom: 80,
   },
   userRow: {
     flexDirection: "row",
