@@ -485,7 +485,7 @@ const VideoCard = memo(function VideoCard({
       <VideoView
         player={player}
         style={StyleSheet.absoluteFillObject}
-        contentFit="contain"
+        contentFit="cover"
         nativeControls={false}
       />
 
@@ -604,9 +604,10 @@ const VideoCard = memo(function VideoCard({
 export default function HomeScreen() {
   const { athlete } = useAuth();
   const insets = useSafeAreaInsets();
-  // Root View's onLayout gives the true content-area height (Expo Router already
-  // subtracts the tab bar). Initialize to full height as a safe fallback.
-  const [cardHeight, setCardHeight] = useState(height);
+  // Exact tab bar height mirrors _layout.tsx: bar(52) + paddingBottom + border(0.5)
+  const tabBarHeight =
+    52 + Math.max(insets.bottom, Platform.OS === "android" ? 8 : 4) + 0.5;
+  const [cardHeight, setCardHeight] = useState(height - tabBarHeight);
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
