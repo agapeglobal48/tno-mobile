@@ -484,8 +484,8 @@ const VideoCard = memo(function VideoCard({
     <View style={[styles.videoCard, { height: cardHeight }]}>
       <VideoView
         player={player}
-        style={{ width, height: cardHeight }}
-        contentFit="cover"
+        style={StyleSheet.absoluteFillObject}
+        contentFit="contain"
         nativeControls={false}
       />
 
@@ -604,7 +604,9 @@ const VideoCard = memo(function VideoCard({
 export default function HomeScreen() {
   const { athlete } = useAuth();
   const insets = useSafeAreaInsets();
-  const cardHeight = height;
+  // Root View's onLayout gives the true content-area height (Expo Router already
+  // subtracts the tab bar). Initialize to full height as a safe fallback.
+  const [cardHeight, setCardHeight] = useState(height);
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -759,7 +761,13 @@ export default function HomeScreen() {
   const CATEGORIES = ["For You", "Trending"];
 
   return (
-    <View style={styles.root}>
+    <View
+      style={styles.root}
+      onLayout={(e) => {
+        const h = e.nativeEvent.layout.height;
+        if (h > 0) setCardHeight(h);
+      }}
+    >
       <StatusBar hidden={true} />
 
       {/* Category pills — centered, only For You + Trending */}
@@ -811,6 +819,7 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1, backgroundColor: "#000" }}
           data={videos}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => (
@@ -831,8 +840,8 @@ export default function HomeScreen() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
           getItemLayout={(_, index) => ({
-            length: height,
-            offset: height * index,
+            length: cardHeight,
+            offset: cardHeight * index,
             index,
           })}
           refreshing={refreshing}
@@ -883,13 +892,13 @@ const styles = StyleSheet.create({
   catText: { color: "#CCC", fontSize: 13, fontWeight: "600" },
   catTextActive: { color: "#0A0A0A" },
 
-  videoCard: { width, height, backgroundColor: "#111" },
+  videoCard: { width, height, backgroundColor: "#000", overflow: "hidden" },
   video: { ...StyleSheet.absoluteFillObject },
 
   actionBar: {
     position: "absolute",
     right: 14,
-    bottom: 150,
+    bottom: 90,
     alignItems: "center",
     gap: 18,
   },
@@ -924,7 +933,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 70,
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 20,
   },
   userRow: {
     flexDirection: "row",
