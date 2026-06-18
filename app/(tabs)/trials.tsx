@@ -1,9 +1,10 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,110 +12,33 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { API_BASE_URL } from "../../src/config/api";
+import { useAuth } from "../../src/context/AuthContext";
 
 const { width } = Dimensions.get("window");
-
-// ── Dummy data ────────────────────────────────────────────────
 const FILTERS = ["All", "Upcoming", "Registered", "Completed"];
 
-const TRIALS = [
-  {
-    id: "1",
-    title: "National Cricket Trials",
-    subtitle: "Open Selection — All Provinces",
-    sport: "Cricket",
-    sportIcon: "cricket",
-    date: "Dec 15, 2024",
-    day: "15",
-    month: "DEC",
-    time: "9:30 AM",
-    venue: "Gaddafi Stadium, Lahore",
-    province: "Punjab",
-    spotsTotal: 100,
-    spotsLeft: 45,
-    status: "Open",
-    registered: false,
-    featured: true,
-    prize: "PKR 50,000",
-  },
-  {
-    id: "2",
-    title: "Provincial Football Cup",
-    subtitle: "Punjab Regional Selection",
-    sport: "Football",
-    sportIcon: "soccer",
-    date: "Jan 8, 2025",
-    day: "08",
-    month: "JAN",
-    time: "2:00 PM",
-    venue: "Punjab Sports Complex, Lahore",
-    province: "Punjab",
-    spotsTotal: 100,
-    spotsLeft: 11,
-    status: "Open",
-    registered: false,
-    featured: false,
-    prize: "PKR 25,000",
-  },
-  {
-    id: "3",
-    title: "Karachi Boxing Championship",
-    subtitle: "Sindh Provincial Qualifier",
-    sport: "Boxing",
-    sportIcon: "boxing-glove",
-    date: "Jan 20, 2025",
-    day: "20",
-    month: "JAN",
-    time: "10:00 AM",
-    venue: "PSB Arena, Karachi",
-    province: "Sindh",
-    spotsTotal: 60,
-    spotsLeft: 30,
-    status: "Open",
-    registered: true,
-    featured: false,
-    prize: "PKR 30,000",
-  },
-  {
-    id: "4",
-    title: "National Swimming Trials",
-    subtitle: "Federal Level Selection",
-    sport: "Swimming",
-    sportIcon: "swim",
-    date: "Feb 2, 2025",
-    day: "02",
-    month: "FEB",
-    time: "8:00 AM",
-    venue: "Aquatic Centre, Islamabad",
-    province: "Federal",
-    spotsTotal: 40,
-    spotsLeft: 0,
-    status: "Completed",
-    registered: false,
-    featured: false,
-    prize: "PKR 20,000",
-  },
-  {
-    id: "5",
-    title: "KPK Athletics Meet",
-    subtitle: "Open Track & Field Trials",
-    sport: "Athletics",
-    sportIcon: "run",
-    date: "Feb 15, 2025",
-    day: "15",
-    month: "FEB",
-    time: "7:00 AM",
-    venue: "Hayatabad Sports Complex, Peshawar",
-    province: "KPK",
-    spotsTotal: 80,
-    spotsLeft: 60,
-    status: "Open",
-    registered: false,
-    featured: false,
-    prize: "PKR 15,000",
-  },
-];
+// ── Types ─────────────────────────────────────────────────────
+interface Trial {
+  id: string;
+  title: string;
+  subtitle: string;
+  sport: string;
+  sportEmoji: string;
+  date: string;
+  day: string;
+  month: string;
+  time: string;
+  venue: string;
+  province: string;
+  spots_total: number;
+  spots_left: number;
+  status: string;
+  featured: boolean;
+  prize: string;
+  registered: boolean;
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 function getSpotsColor(left: number, total: number) {
@@ -130,69 +54,59 @@ function getSpotsLabel(left: number, total: number) {
   return `${left} of ${total} spots`;
 }
 
-// ── Featured banner card ──────────────────────────────────────
+// ── Featured card ─────────────────────────────────────────────
 function FeaturedCard({
   trial,
   onRegister,
+  registering,
 }: {
-  trial: any;
+  trial: Trial;
   onRegister: (id: string) => void;
+  registering: boolean;
 }) {
-  const spotsColor = getSpotsColor(trial.spotsLeft, trial.spotsTotal);
-  const pct = Math.round((1 - trial.spotsLeft / trial.spotsTotal) * 100);
+  const spotsColor = getSpotsColor(trial.spots_left, trial.spots_total);
+  const pct = Math.round((1 - trial.spots_left / trial.spots_total) * 100);
 
   return (
     <View style={feat.card}>
-      {/* Top accent bar */}
       <View style={feat.accentBar} />
-
-      {/* Header row */}
       <View style={feat.header}>
         <View style={feat.sportBadge}>
-          <MaterialCommunityIcons name={trial.sportIcon as any} size={14} color="#EF4444" />
+          <Text style={feat.sportEmoji}>{trial.sportEmoji}</Text>
           <Text style={feat.sportName}>{trial.sport}</Text>
         </View>
         <View style={feat.featuredBadge}>
-          <Ionicons name="star" size={10} color="#F59E0B" />
-          <Text style={feat.featuredText}>FEATURED</Text>
+          <Text style={feat.featuredText}>⭐ FEATURED</Text>
         </View>
       </View>
-
-      {/* Title */}
       <Text style={feat.title}>{trial.title}</Text>
       <Text style={feat.subtitle}>{trial.subtitle}</Text>
-
-      {/* Date / Time / Venue row */}
       <View style={feat.infoGrid}>
         <View style={feat.infoBox}>
-          <Ionicons name="calendar-outline" size={16} color="#EF4444" />
+          <Text style={feat.infoIcon}>📅</Text>
           <Text style={feat.infoLabel}>DATE</Text>
           <Text style={feat.infoValue}>{trial.date}</Text>
         </View>
         <View style={feat.infoDivider} />
         <View style={feat.infoBox}>
-          <Ionicons name="time-outline" size={16} color="#EF4444" />
+          <Text style={feat.infoIcon}>🕐</Text>
           <Text style={feat.infoLabel}>TIME</Text>
           <Text style={feat.infoValue}>{trial.time}</Text>
         </View>
         <View style={feat.infoDivider} />
         <View style={feat.infoBox}>
-          <MaterialCommunityIcons name="trophy" size={16} color="#EF4444" />
+          <Text style={feat.infoIcon}>🏆</Text>
           <Text style={feat.infoLabel}>PRIZE</Text>
           <Text style={feat.infoValue}>{trial.prize}</Text>
         </View>
       </View>
-
-      {/* Venue */}
       <View style={feat.venueRow}>
-        <Ionicons name="location-outline" size={13} color="#666" />
+        <Text style={feat.venueIcon}>📍</Text>
         <Text style={feat.venueText}>{trial.venue}</Text>
       </View>
-
-      {/* Spots progress bar */}
       <View style={feat.spotsRow}>
         <Text style={[feat.spotsText, { color: spotsColor }]}>
-          {getSpotsLabel(trial.spotsLeft, trial.spotsTotal)}
+          {getSpotsLabel(trial.spots_left, trial.spots_total)}
         </Text>
         <Text style={feat.spotsPct}>{pct}% filled</Text>
       </View>
@@ -200,28 +114,28 @@ function FeaturedCard({
         <View
           style={[
             feat.progressFill,
-            { width: `${pct}%`, backgroundColor: spotsColor },
+            { width: `${pct}%` as any, backgroundColor: spotsColor },
           ]}
         />
       </View>
-
-      {/* Register button */}
       <TouchableOpacity
         style={[feat.registerBtn, trial.registered && feat.registeredBtn]}
         onPress={() => onRegister(trial.id)}
+        disabled={registering || trial.spots_left === 0}
         activeOpacity={0.85}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {trial.registered
-            ? <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-            : null}
-          <Text style={[feat.registerText, trial.registered && { color: "#22c55e" }]}>
-            {trial.registered ? "Registered" : "Register Now"}
+        {registering ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text
+            style={[
+              feat.registerText,
+              trial.registered && { color: "#22c55e" },
+            ]}
+          >
+            {trial.registered ? "✓  Registered" : "Register Now  →"}
           </Text>
-          {!trial.registered
-            ? <Ionicons name="arrow-forward" size={14} color="#fff" />
-            : null}
-        </View>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -352,17 +266,18 @@ const feat = StyleSheet.create({
 function TrialCard({
   trial,
   onRegister,
+  registering,
 }: {
-  trial: any;
+  trial: Trial;
   onRegister: (id: string) => void;
+  registering: boolean;
 }) {
-  const spotsColor = getSpotsColor(trial.spotsLeft, trial.spotsTotal);
-  const isFull = trial.spotsLeft === 0;
+  const spotsColor = getSpotsColor(trial.spots_left, trial.spots_total);
+  const isFull = trial.spots_left === 0;
   const isCompleted = trial.status === "Completed";
 
   return (
     <View style={card.container}>
-      {/* Left date column */}
       <View style={card.dateCol}>
         <Text style={card.day}>{trial.day}</Text>
         <Text style={card.month}>{trial.month}</Text>
@@ -374,19 +289,16 @@ function TrialCard({
         />
         <View style={card.line} />
       </View>
-
-      {/* Right content */}
       <View style={card.content}>
-        {/* Sport + status badges */}
         <View style={card.badgeRow}>
-          <View style={[card.sportPill, { flexDirection: "row", alignItems: "center", gap: 4 }]}>
-            <MaterialCommunityIcons name={trial.sportIcon as any} size={10} color="#EF4444" />
-            <Text style={card.sportPillText}>{trial.sport}</Text>
+          <View style={card.sportPill}>
+            <Text style={card.sportPillText}>
+              {trial.sportEmoji} {trial.sport}
+            </Text>
           </View>
           {trial.registered && (
-            <View style={[card.regPill, { flexDirection: "row", alignItems: "center", gap: 3 }]}>
-              <Ionicons name="checkmark-circle" size={10} color="#22c55e" />
-              <Text style={card.regPillText}>Registered</Text>
+            <View style={card.regPill}>
+              <Text style={card.regPillText}>✓ Registered</Text>
             </View>
           )}
           {isCompleted && (
@@ -395,49 +307,52 @@ function TrialCard({
             </View>
           )}
           {!isCompleted &&
-            trial.spotsLeft / trial.spotsTotal <= 0.2 &&
-            trial.spotsLeft > 0 && (
-              <View style={[card.hotPill, { flexDirection: "row", alignItems: "center", gap: 3 }]}>
-                <MaterialCommunityIcons name="fire" size={10} color="#F59E0B" />
-                <Text style={card.hotPillText}>Hot</Text>
+            trial.spots_left / trial.spots_total <= 0.2 &&
+            trial.spots_left > 0 && (
+              <View style={card.hotPill}>
+                <Text style={card.hotPillText}>🔥 Hot</Text>
               </View>
             )}
         </View>
-
-        {/* Title */}
         <Text style={card.title}>{trial.title}</Text>
-
-        {/* Info rows */}
         <View style={card.infoRow}>
-          <Ionicons name="time-outline" size={11} color="#666" />
+          <Text style={card.infoIcon}>🕐</Text>
           <Text style={card.infoText}>
             {trial.time} · {trial.province}
           </Text>
         </View>
         <View style={card.infoRow}>
-          <Ionicons name="location-outline" size={11} color="#666" />
+          <Text style={card.infoIcon}>📍</Text>
           <Text style={card.infoText} numberOfLines={1}>
             {trial.venue}
           </Text>
         </View>
         <View style={card.infoRow}>
-          <MaterialCommunityIcons name="trophy" size={11} color="#666" />
+          <Text style={card.infoIcon}>🏆</Text>
           <Text style={card.infoText}>{trial.prize}</Text>
         </View>
-
-        {/* Spots + action */}
         {!isCompleted && (
           <View style={card.footer}>
             <Text style={[card.spotsText, { color: spotsColor }]}>
-              {getSpotsLabel(trial.spotsLeft, trial.spotsTotal)}
+              {getSpotsLabel(trial.spots_left, trial.spots_total)}
             </Text>
-            {!isFull && !trial.registered && (
+            {!isFull && (
               <TouchableOpacity
-                style={card.registerBtn}
+                style={[
+                  card.registerBtn,
+                  trial.registered && card.unregisterBtn,
+                ]}
                 onPress={() => onRegister(trial.id)}
+                disabled={registering}
                 activeOpacity={0.8}
               >
-                <Text style={card.registerText}>Register →</Text>
+                {registering ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={card.registerText}>
+                    {trial.registered ? "Unregister" : "Register →"}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -449,8 +364,6 @@ function TrialCard({
 
 const card = StyleSheet.create({
   container: { flexDirection: "row", marginHorizontal: 20, marginBottom: 4 },
-
-  // Date column
   dateCol: { width: 44, alignItems: "center", paddingTop: 4 },
   day: { color: "#F5F5F5", fontSize: 18, fontWeight: "900", lineHeight: 20 },
   month: {
@@ -467,8 +380,6 @@ const card = StyleSheet.create({
     marginBottom: 4,
   },
   line: { flex: 1, width: 1, backgroundColor: "#1E1E1E", marginBottom: -4 },
-
-  // Content
   content: {
     flex: 1,
     marginLeft: 14,
@@ -508,7 +419,6 @@ const card = StyleSheet.create({
     paddingVertical: 3,
   },
   hotPillText: { color: "#F59E0B", fontSize: 10, fontWeight: "700" },
-
   title: {
     color: "#F5F5F5",
     fontSize: 14,
@@ -524,7 +434,6 @@ const card = StyleSheet.create({
   },
   infoIcon: { fontSize: 11, width: 16 },
   infoText: { color: "#888", fontSize: 11, flex: 1 },
-
   footer: {
     flexDirection: "row",
     alignItems: "center",
@@ -540,26 +449,37 @@ const card = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 6,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  unregisterBtn: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#555",
   },
   registerText: { color: "#fff", fontSize: 11, fontWeight: "800" },
 });
 
 // ── Stats bar ─────────────────────────────────────────────────
-function StatsBar() {
+function StatsBar({ trials }: { trials: Trial[] }) {
+  const total = trials.length;
+  const open = trials.filter((t) => t.status === "Open").length;
+  const registered = trials.filter((t) => t.registered).length;
+
   return (
     <View style={stats.row}>
       <View style={stats.item}>
-        <Text style={stats.number}>5</Text>
+        <Text style={stats.number}>{total}</Text>
         <Text style={stats.label}>Total Trials</Text>
       </View>
       <View style={stats.divider} />
       <View style={stats.item}>
-        <Text style={stats.number}>3</Text>
+        <Text style={stats.number}>{open}</Text>
         <Text style={stats.label}>Open Now</Text>
       </View>
       <View style={stats.divider} />
       <View style={stats.item}>
-        <Text style={stats.number}>1</Text>
+        <Text style={stats.number}>{registered}</Text>
         <Text style={stats.label}>Registered</Text>
       </View>
     </View>
@@ -584,35 +504,78 @@ const stats = StyleSheet.create({
 });
 
 // ── Main screen ───────────────────────────────────────────────
-const REGISTERED_KEY = "@tno_registered_trials";
-
 export default function TrialsScreen() {
+  const insets = useSafeAreaInsets();
+  const { athlete } = useAuth();
+
+  const [trials, setTrials] = useState<Trial[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState("All");
-  const [trials, setTrials] = useState(TRIALS);
-  const [loading, setLoading] = useState(false);
+  const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-  // Persist registration state across app restarts
-  useEffect(() => {
-    AsyncStorage.getItem(REGISTERED_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const registeredIds: string[] = JSON.parse(raw);
-        setTrials((prev) =>
-          prev.map((t) => ({ ...t, registered: registeredIds.includes(t.id) })),
-        );
-      })
-      .catch(() => {});
-  }, []);
+  const fetchTrials = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setError("");
+      try {
+        const url = athlete?.id
+          ? `${API_BASE_URL}/api/trials?athlete_id=${athlete.id}`
+          : `${API_BASE_URL}/api/trials`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (res.ok) setTrials(data.data ?? []);
+        else setError("Could not load trials.");
+      } catch {
+        setError("Cannot reach server.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [athlete?.id],
+  );
 
-  function handleRegister(id: string) {
-    setTrials((prev) => {
-      const updated = prev.map((t) =>
-        t.id === id ? { ...t, registered: !t.registered } : t,
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchTrials();
+    }, [fetchTrials]),
+  );
+
+  async function handleRegister(trialId: string) {
+    if (!athlete?.id) return;
+    setRegisteringId(trialId);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/trials/${trialId}/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ athlete_id: athlete.id }),
+        },
       );
-      const registeredIds = updated.filter((t) => t.registered).map((t) => t.id);
-      AsyncStorage.setItem(REGISTERED_KEY, JSON.stringify(registeredIds)).catch(() => {});
-      return updated;
-    });
+      const data = await res.json();
+      if (res.ok) {
+        // Update local state immediately
+        setTrials((prev) =>
+          prev.map((t) => {
+            if (t.id !== trialId) return t;
+            const newRegistered = data.registered;
+            return {
+              ...t,
+              registered: newRegistered,
+              spots_left: newRegistered ? t.spots_left - 1 : t.spots_left + 1,
+            };
+          }),
+        );
+      }
+    } catch {
+    } finally {
+      setRegisteringId(null);
+    }
   }
 
   const filtered = trials.filter((t) => {
@@ -627,32 +590,67 @@ export default function TrialsScreen() {
   const featured = filtered.filter((t) => t.featured);
   const regular = filtered.filter((t) => !t.featured);
 
-  return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
-      <StatusBar hidden={true} />
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.root,
+          { alignItems: "center", justifyContent: "center" },
+        ]}
+      >
+        <StatusBar hidden={true} />
+        <ActivityIndicator color="#EF4444" size="large" />
+        <Text style={{ color: "#666", fontSize: 13, marginTop: 12 }}>
+          Loading trials...
+        </Text>
+      </View>
+    );
+  }
 
+  return (
+    <View style={styles.root}>
+      <StatusBar hidden={true} />
       <FlatList
         data={regular}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchTrials(true)}
+            tintColor="#EF4444"
+            colors={["#EF4444"]}
+          />
+        }
         ListHeaderComponent={
           <>
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
               <View>
                 <Text style={styles.heading}>TRIALS &</Text>
                 <Text style={styles.headingAccent}>EVENTS</Text>
               </View>
               <View style={styles.headerRight}>
                 <Text style={styles.headerSub}>Pakistan Sports Initiative</Text>
-                <MaterialCommunityIcons name="trophy" size={28} color="#EF4444" />
+                <Text style={styles.headerEmoji}>🏅</Text>
               </View>
             </View>
 
-            {/* Stats */}
-            <StatsBar />
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>⚠ {error}</Text>
+                <TouchableOpacity
+                  onPress={() => fetchTrials()}
+                  style={styles.retryBtn}
+                >
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <StatsBar trials={trials} />
+            )}
 
-            {/* Filter pills */}
+            {/* Filters */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -681,58 +679,59 @@ export default function TrialsScreen() {
               ))}
             </ScrollView>
 
-            {/* Featured card */}
+            {/* Featured */}
             {featured.length > 0 && (
               <>
-                <View style={styles.sectionLabelRow}>
-                  <Ionicons name="star" size={13} color="#F59E0B" />
-                  <Text style={styles.sectionLabel}>FEATURED</Text>
-                </View>
+                <Text style={styles.sectionLabel}>⭐ FEATURED</Text>
                 {featured.map((t) => (
                   <FeaturedCard
                     key={t.id}
                     trial={t}
                     onRegister={handleRegister}
+                    registering={registeringId === t.id}
                   />
                 ))}
               </>
             )}
 
-            {/* Timeline label */}
             {regular.length > 0 && (
-              <View style={styles.sectionLabelRow}>
-                <Ionicons name="calendar-outline" size={13} color="#666" />
-                <Text style={styles.sectionLabel}>UPCOMING EVENTS</Text>
-              </View>
+              <Text style={styles.sectionLabel}>📅 UPCOMING EVENTS</Text>
             )}
           </>
         }
         renderItem={({ item }) => (
-          <TrialCard trial={item} onRegister={handleRegister} />
+          <TrialCard
+            trial={item}
+            onRegister={handleRegister}
+            registering={registeringId === item.id}
+          />
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <MaterialCommunityIcons name="stadium-outline" size={48} color="#333" />
-            <Text style={styles.emptyTitle}>No trials found</Text>
-            <Text style={styles.emptyText}>Check back soon for new events</Text>
-          </View>
+          !loading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyIcon}>🏟</Text>
+              <Text style={styles.emptyTitle}>No trials found</Text>
+              <Text style={styles.emptyText}>
+                {activeFilter === "Registered"
+                  ? "You haven't registered for any trials yet."
+                  : "Check back soon for new events."}
+              </Text>
+            </View>
+          ) : null
         }
         ListFooterComponent={<View style={{ height: 30 }} />}
-        contentContainerStyle={{ paddingBottom: 10 }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0A0A0A" },
-
   header: {
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 16,
     paddingBottom: 20,
   },
   heading: {
@@ -751,7 +750,7 @@ const styles = StyleSheet.create({
   },
   headerRight: { alignItems: "flex-end", gap: 4 },
   headerSub: { color: "#555", fontSize: 10, letterSpacing: 0.5 },
-
+  headerEmoji: { fontSize: 28 },
   filterRow: { marginBottom: 20 },
   filterScroll: { paddingHorizontal: 20, gap: 8 },
   filterPill: {
@@ -765,27 +764,45 @@ const styles = StyleSheet.create({
   filterPillActive: { backgroundColor: "#D32F2F", borderColor: "#D32F2F" },
   filterText: { color: "#666", fontSize: 13, fontWeight: "600" },
   filterTextActive: { color: "#fff" },
-
-  sectionLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginHorizontal: 20,
-    marginBottom: 14,
-  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
     color: "#555",
     letterSpacing: 2,
+    marginHorizontal: 20,
+    marginBottom: 14,
   },
-
+  errorBox: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: "rgba(239,68,68,0.1)",
+    borderWidth: 0.5,
+    borderColor: "#EF4444",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    gap: 10,
+  },
+  errorText: { color: "#EF4444", fontSize: 13 },
+  retryBtn: {
+    backgroundColor: "#D32F2F",
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  retryText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   empty: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 60,
     gap: 12,
   },
+  emptyIcon: { fontSize: 48 },
   emptyTitle: { color: "#F5F5F5", fontSize: 18, fontWeight: "800" },
-  emptyText: { color: "#555", fontSize: 13 },
+  emptyText: {
+    color: "#555",
+    fontSize: 13,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
 });

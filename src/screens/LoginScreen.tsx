@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -14,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Field from "../components/Field";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +21,8 @@ import { useAuth } from "../context/AuthContext";
 export default function LoginScreen() {
   const router = useRouter();
   const { setAthlete } = useAuth();
+  const insets = useSafeAreaInsets();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -30,6 +31,9 @@ export default function LoginScreen() {
     {},
   );
   const [serverError, setServerError] = useState("");
+  const [unverified, setUnverified] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   function validate(): boolean {
     const e: { email?: string; password?: string } = {};
@@ -45,6 +49,8 @@ export default function LoginScreen() {
     if (!validate()) return;
     setLoading(true);
     setServerError("");
+    setUnverified(false);
+    setResendSuccess(false);
 
     try {
       const body = new URLSearchParams();
@@ -61,31 +67,46 @@ export default function LoginScreen() {
 
       if (response.ok) {
         setAthlete(data.data);
-        router.push({
-          pathname: "/(tabs)/profile",
-          params: { athlete: JSON.stringify(data.data) },
-        });
+        router.replace("/(tabs)");
+      } else if (data.code === "EMAIL_NOT_VERIFIED") {
+        setUnverified(true);
       } else {
         setServerError(data.message || "Login failed. Please try again.");
       }
     } catch (err) {
       setServerError(
-        "Unable to connect. Please check your internet connection and try again.",
+        "Cannot reach server. Make sure backend is running and IP is correct in src/config/api.ts",
       );
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleResendVerification() {
+    setResendLoading(true);
+    setResendSuccess(false);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      if (res.ok) setResendSuccess(true);
+    } catch {
+    } finally {
+      setResendLoading(false);
+    }
+  }
+
   return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
+    <View style={styles.root}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <StatusBar hidden={true} />
 
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <Image
             source={require("../../assets/icon.png")}
             style={styles.headerLogoImg}
@@ -119,10 +140,41 @@ export default function LoginScreen() {
 
             {serverError ? (
               <View style={styles.errorBanner}>
-                <View style={styles.errorBannerRow}>
-                  <Ionicons name="warning-outline" size={15} color="#EF4444" />
-                  <Text style={styles.errorBannerText}>{serverError}</Text>
-                </View>
+                <Text style={styles.errorBannerText}>⚠ {serverError}</Text>
+              </View>
+            ) : null}
+
+            {/* Email not verified banner */}
+            {unverified ? (
+              <View style={styles.verifyBanner}>
+                <Text style={styles.verifyTitle}>📧 Email Not Verified</Text>
+                <Text style={styles.verifyText}>
+                  Please check your inbox and tap the verification link before
+                  logging in.
+                </Text>
+                {resendSuccess ? (
+                  <Text style={styles.verifySuccess}>
+                    ✓ Verification email resent!
+                  </Text>
+                ) : (
+                  <TouchableOpacity
+                    onPress={handleResendVerification}
+                    disabled={resendLoading}
+                    activeOpacity={0.7}
+                  >
+                    {resendLoading ? (
+                      <ActivityIndicator
+                        color="#EF4444"
+                        size="small"
+                        style={{ marginTop: 8 }}
+                      />
+                    ) : (
+                      <Text style={styles.resendLink}>
+                        Resend verification email
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             ) : null}
 
@@ -222,7 +274,7 @@ export default function LoginScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -237,7 +289,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
-    paddingTop: 10,
     paddingBottom: 14,
     borderBottomWidth: 0.5,
     borderBottomColor: "#2A2A2A",
@@ -302,16 +353,34 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  errorBannerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
   errorBannerText: {
-    flex: 1,
     color: "#EF4444",
     fontSize: 13,
     lineHeight: 18,
+  },
+  verifyBanner: {
+    backgroundColor: "rgba(245,158,11,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.4)",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
+    gap: 6,
+  },
+  verifyTitle: { color: "#F59E0B", fontSize: 14, fontWeight: "800" },
+  verifyText: { color: "#CCC", fontSize: 12, lineHeight: 18 },
+  verifySuccess: {
+    color: "#22c55e",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  resendLink: {
+    color: "#F59E0B",
+    fontSize: 12,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+    marginTop: 4,
   },
 
   fieldGap: { gap: 4 },

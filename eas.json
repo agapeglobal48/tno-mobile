@@ -21,8 +21,7 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease",
-        "withoutCredentials": false,
-        "ccacheEnabled": true
+        "withoutCredentials": false
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1"
